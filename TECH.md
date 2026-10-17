@@ -315,3 +315,44 @@ grep -qE 'netcheck\s+success' /tmp/netcheck-last.log
 | 2 | 库（library）与 `listLibrary` | 对标 Anytype Channel，下一轮实现 |
 | 3 | 历史记录是否服务端加密 | 当前为明文 JSONL，仅靠文件权限保护 |
 
+## 8. 用户域对象模型与对象同步通道（20261017 20:05-01 已实施）
+
+本节记录**实测确认**的写入/读取链路，供后续实现与排障复核。所有结论均来自本地 6 进程网络（coordinator 2004 / consensus 2006 / filenode 2005 / node-1~3 2001–2003）的日志与数据库取证。
+
+### 8.1 对象模型（用户域 = Space）
+
+| 概念 | 落地方式 |
+| --- | --- |
+| 用户域 | any-sync 的 Space，一个空间 ID |
+| 库（library） | 空间内一棵独立对象树，根变更 `changeType=library` |
+| 记录（entry） | 空间内另一棵独立对象树，根变更 `changeType=entry`，载荷内 `lib=<库对象 ID>` |
+| 归属关系 | 由记录对象载荷里的 `lib` 属性表达，**网络不解释**，空间里没有“对象清单”字段 |
+| 加密 | 根变更的 `ChangePayload` 用空间 ReadKey（AES）加密后再写入 |
+
+对象 ID = 根变更的 CID。库与记录在空间内**平级**，不存在“记录挂在库下面”的树结构。
+
+### 8.2 写入通道（关键：节点会反向开流）
+
+新对象入网需要四步，缺一不可：
+
+1. **协调节点取配置**：`NetworkConfiguration` 拿到 networkId 与节点清单（不要用本地 nodes.yml 自算）；
+2. **建空间**（仅首次）：`SpaceSign` 取回执 → `SpacePush` 到全部负责节点；
+3. **推对象**：在 `ObjectSyncStream`（双向长连接）上发送 `headUpdate`，携带对象根；
+4. **接受节点回拉**：节点发现本地没有该对象，会**在同一条 yamux 连接上反向开流**，调用 `ObjectSyncRequestStream` 索要数据；客户端必须在该连接上 `MultiConn.Accept()` 接受流、完成 DRPC 协议握手、以 SpaceSync 服务端应答 `FullSyncResponse`（含 `RootChange` 与 `Heads`）。
+
+**易错点**：只做“出站推送”而不接受反向流，节点会反复记录 `tree does not exist`，对象永远不落盘。
+
+### 8.3 读取通道
+
+- **不要用 `HeadSync` 判成败**：它是差异同步语义，新建对象不会出现在其结果里，即使对象已经落盘。
+- 正确做法：**按对象 ID 拉根**——`ObjectSyncRequestStream` 发 `FullSyncRequest{Probe:true}`，取回 `RootChange`，用 ReadKey 解密 `ChangePayload`。
+- 各节点独立持有：未推送到的节点会返回 `tree not found`，因此写入要遍历全部负责节点。
+
+### 8.4 已完成的验证
+
+| 项 | 结果 |
+| --- | --- |
+| 用户域创建（含 SpaceSign/SpacePush） | 3/3 负责节点成功 |
+| 库对象写入 | 3/3 节点接受，按 ID 可原样回读（`changeType=library`，载荷为密文） |
+| 2 库 + 4 记录 | 主实例（:8787）与副本实例（:8788）均可从网络读回，`lib` 属性正确归属 |
+| 节点持久化 | 空间 `store.db` 的 `_heads_docs` 含新对象条目；重启后仍可回读 |
