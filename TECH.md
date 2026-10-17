@@ -387,6 +387,36 @@ go build -ldflags "-X main.buildCommit=$(git -C ../../.. rev-parse --short HEAD)
 **注意**：本机主/副本共用同一个 `data/libraries.jsonl`，所以本地记录天然一致；
 副本后台拉取的意义在于把**网络上其他设备的更新**带进本地，界面轮询再把变化呈现出来。
 
+### 9.11 实时同步（head update 订阅）
+
+对象变更的实时通知**不需要 PubSub**：节点把 head update 广播给所有带该 spaceId 标签的流，
+客户端只要把 `ObjectSyncStream` 常驻并先发 `SpaceSubscription` 即可收到。
+
+```
+ObjectSyncStream（常驻）
+  ① SpaceSubscription{SpaceIds:[space], Subscribe}   → 节点给这条流打上 space 标签
+  ② 其他实例写入 → 节点 nodePeerManager.BroadcastMessage → streamPool.Broadcast(spaceId)
+  ③ 客户端收到 HeadUpdate{objectId, heads, changes}
+  ④ 去抖 500ms → pullAndSave（按对象或整域拉取）
+```
+
+| 项 | 实现要点 |
+| --- | --- |
+| 订阅生命周期 | 跟随当前用户域；`domain.json` 变化即取消旧订阅、订阅新空间 |
+| 断线重连 | 读流出错后 5 秒重试；重连成功做一次全量对账 |
+| 去抖 | 500ms 合并同一批事件，避免重复拉取 |
+| 兜底 | 保留定时轮询（副本 20 秒），广播 at-most-once 不保证送达 |
+| 观测 | `GET /api/sync/status`：connected / events / pulls / lastEventAt / lastError |
+
+**必须记住的坑（实测）**
+
+| 现象 | 原因 | 处理 |
+| --- | --- | --- |
+| 订阅几秒后 `context canceled`，节点日志 `peer close` + `stream removed` | 同一个**设备密钥（peerId）**存在多条连接：新连接到达时节点关闭旧连接 | 每个进程、每种用途各用独立 device key：业务用 `device-<实例>.key`，订阅用 `device-<实例>-sub.key` |
+| 多进程共享助记词时互相踢线 | 助记词派生出相同 device key | 账户密钥仍来自助记词，**device key 单独生成并持久化** |
+
+结论：**同一账户下，设备身份的粒度是“每个客户端实例、每种连接用途”**；绝不能让两个进程或两类连接共用同一 device key。
+
 ## 10. 排障时最容易踩的坑
 
 | 现象 | 真实原因 |
