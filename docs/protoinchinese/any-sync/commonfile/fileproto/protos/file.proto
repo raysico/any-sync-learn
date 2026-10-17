@@ -1,0 +1,201 @@
+// ============================================================
+// 源文件：src/commonfile/fileproto/protos/file.proto
+// 所属仓库：any-sync
+// proto 包：filesync
+// 服务：File
+// RPC 数量：14
+// 说明：由 scripts/translate-proto.py 生成；字段名、编号、类型保持原样，注释译为中文。
+// ============================================================
+
+syntax = "proto3";
+package filesync;
+
+option go_package = "commonfile/fileproto";
+
+enum ErrCodes {
+    Unexpected = 0;
+    CIDNotFound = 1;
+    Forbidden = 2;
+    _DeprecatedLimitExceeded = 3;
+    QuerySizeExceeded = 4;
+    WrongHash = 5;
+    NotEnoughSpace = 6;
+    AclRecordNotFound = 7;
+    LimitExceeded = 8;
+    ErrorOffset = 200;
+}
+
+service File {
+// BlockGet gets one block 来自 a server
+    rpc BlockGet(BlockGetRequest) returns (BlockGetResponse);
+// BlockPush pushes one block 到 a server
+    rpc BlockPush(BlockPushRequest) returns (Ok);
+// BlockPushMany pushes many blocks 到 a server
+    rpc BlockPushMany(BlockPushManyRequest) returns (Ok);
+// BlocksCheck checks 是 CIDs exists
+    rpc BlocksCheck(BlocksCheckRequest) returns (BlocksCheckResponse);
+// BlocksBind binds CIDs 到 空间
+    rpc BlocksBind(BlocksBindRequest) returns (Ok);
+// FilesDelete deletes 文件 by ID
+    rpc FilesDelete(FilesDeleteRequest) returns (FilesDeleteResponse);
+// FilesInfo return info by given 文件 ID
+    rpc FilesInfo(FilesInfoRequest) returns (FilesInfoResponse);
+// FilesGet returns a stream ， streams 所有 文件 ID 在 空间
+    rpc FilesGet(FilesGetRequest) returns (stream FilesGetResponse);
+// 【原文】Check checks the connection and credentials
+    rpc Check(CheckRequest) returns (CheckResponse);
+// SpaceInfo returns usage, 限制, etc about 空间
+    rpc SpaceInfo(SpaceInfoRequest) returns (SpaceInfoResponse);
+// AccountInfo returns usage, 限制, etc by 所有 空间
+    rpc AccountInfo(AccountInfoRequest) returns (AccountInfoResponse);
+// AccountLimitSet sets 账户 文件 storage 限制 (available 仅 用于 nodeconf members)
+    rpc AccountLimitSet(AccountLimitSetRequest) returns (Ok);
+// SpaceLimitSet sets 空间 限制. 限制 0 means 空间 将 use 账户 限制.
+    rpc SpaceLimitSet(SpaceLimitSetRequest) returns (Ok);
+// BlockDeleteUnbound permanently deletes a block ， 是 不 bound 到 任意 空间 (refs == 0).
+// Available 仅 用于 coordinator 节点; intended 用于 邀请-文件 cleanup.
+    rpc BlockDeleteUnbound(BlockDeleteUnboundRequest) returns (Ok);
+}
+
+message Ok {}
+
+message BlockGetRequest {
+    string spaceId = 1;
+    bytes cid = 2;
+    bool wait = 3;
+}
+
+message BlockGetResponse {
+    bytes cid = 1;
+    bytes data = 2;
+}
+
+message BlockPushRequest {
+    string spaceId = 1;
+    string fileId = 2;
+    bytes cid = 3;
+    bytes data = 4;
+}
+
+message BlockPushManyRequest {
+  repeated FileBlocks fileBlocks = 1;
+}
+
+message FileBlocks {
+  string fileId = 1;
+  string spaceId = 2;
+  repeated Block blocks = 3;
+}
+
+message Block {
+  bytes cid = 2;
+  bytes data = 3;
+}
+
+
+message BlocksCheckRequest {
+    string spaceId = 1;
+    repeated bytes cids = 2;
+}
+
+message BlocksCheckResponse {
+    repeated BlockAvailability blocksAvailability = 1;
+}
+
+message BlockAvailability {
+    bytes cid = 1;
+    AvailabilityStatus status = 2;
+}
+
+enum AvailabilityStatus {
+    NotExists = 0;
+    Exists = 1;
+    ExistsInSpace = 2;
+}
+
+message BlocksBindRequest {
+    string spaceId = 1;
+    string fileId = 2;
+    repeated bytes cids = 3;
+}
+
+
+message FilesDeleteRequest {
+    string spaceId = 1;
+    repeated string fileIds = 2;
+}
+
+message FilesDeleteResponse {}
+
+message FilesInfoRequest {
+    string spaceId = 1;
+    repeated string fileIds = 2;
+}
+
+message FilesInfoResponse {
+    repeated FileInfo filesInfo = 1;
+}
+
+message FileInfo {
+    string fileId = 1;
+    uint64 usageBytes = 2;
+    uint32 cidsCount = 3;
+}
+
+message FilesGetRequest {
+    string spaceId = 1;
+}
+
+message FilesGetResponse {
+    string fileId = 1;
+}
+
+
+message CheckRequest {}
+
+message CheckResponse {
+    repeated string spaceIds = 1;
+    bool allowWrite = 2;
+}
+
+message SpaceInfoRequest {
+    string spaceId = 1;
+}
+
+message SpaceInfoResponse {
+    uint64 limitBytes = 1;
+    uint64 totalUsageBytes = 2;
+    uint64 cidsCount = 3;
+    uint64 filesCount = 4;
+    uint64 spaceUsageBytes = 5;
+    string spaceId = 6;
+}
+
+message AccountInfoRequest {
+}
+
+message AccountInfoResponse {
+// shared 限制 excluding isolated 空间
+    uint64 limitBytes = 1;
+    uint64 totalUsageBytes = 2;
+    uint64 totalCidsCount = 3;
+    repeated SpaceInfoResponse spaces = 4;
+// total 限制 including isolated 空间
+    uint64 accountLimitBytes = 5;
+}
+
+
+message AccountLimitSetRequest {
+    string identity = 1;
+    uint64 limit = 2;
+}
+
+message SpaceLimitSetRequest {
+    string spaceId = 1;
+    uint64 limit = 2;
+}
+
+message BlockDeleteUnboundRequest {
+    bytes cid = 1;
+}
+

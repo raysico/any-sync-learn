@@ -1,0 +1,180 @@
+// ============================================================
+// 源文件：src/any-sync/commonspace/object/tree/treechangeproto/protos/treechange.proto
+// 所属仓库：any-sync ｜ proto 包：treechange ｜ 错误码区间：400–499
+// 说明：字段名、编号、类型保持原样；注释为中文精翻。
+// ============================================================
+
+syntax = "proto3";
+package treechange;
+option go_package = "commonspace/object/tree/treechangeproto";
+
+// RootChange 是一棵树的根（对象的初始状态）
+// 关键语义：any-sync 里“一个对象 = 一个根 + 后续变更链”，对象 ID 由根的 CID 决定。
+message RootChange {
+    // AclHeadId 是建树时刻最新一条 ACL 记录的 CID
+    string aclHeadId = 1;
+    // SpaceId 是文档所在的空间 ID（对应我们的“用户域”）
+    string spaceId = 2;
+    // ChangeType 是树的类型；本 RootChange 就是这个类型的根。
+    // 注意：这是任意字符串，网络不解释它（库 / 记录 / 空间设置都靠它区分）
+    string changeType = 3;
+    // Timestamp 是本变更的创建时间戳
+    int64 timestamp = 4;
+    // Seed 是用于让根变更唯一的随机字节
+    bytes seed = 5;
+    // Identity 是树创建者的公钥
+    bytes identity = 6;
+    // ChangePayload 是与 ChangeType 相关的载荷（应用自定义内容，通常加密后写入）
+    bytes changePayload = 7;
+    // IsDerived 标识该树是否为派生树
+    bool isDerived = 8;
+    // ParentId 是绑定的派生对象的父对象 ID
+    string parentId = 9;
+}
+
+// TreeChange 是树中的一次普通变更
+message TreeChange {
+    // TreeHeadIds 是本变更的前置头节点 ID 列表（多个表示合并分支）
+    repeated string treeHeadIds = 1;
+    // AclHeadId 是本次变更创建时最新 ACL 记录的 CID
+    string aclHeadId = 2;
+    // SnapshotBaseId 是本变更所加入的那棵树的快照（根）
+    string snapshotBaseId = 3;
+    // ChangesData 是供客户端读取的任意载荷
+    bytes changesData = 4;
+    // ReadKeyId 是读密钥的 ID
+    string readKeyId = 5;
+    // Timestamp 是本变更的创建时间戳
+    int64 timestamp = 6;
+    // Identity 是签名本变更原始载荷所用的公钥
+    bytes identity = 7;
+    // IsSnapshot 表示本变更是否包含状态快照
+    bool isSnapshot = 8;
+    // DataType 为客户端提供数据的特殊参数
+    string dataType = 9;
+}
+
+// NoDataTreeChange 是不含 ChangesData 的变更（结构与 TreeChange 一致）
+message NoDataTreeChange {
+    // TreeHeadIds 是本变更的前置头节点 ID 列表
+    repeated string treeHeadIds = 1;
+    // AclHeadId 是本次变更创建时最新 ACL 记录的 CID
+    string aclHeadId = 2;
+    // SnapshotBaseId 是本变更所加入的那棵树的快照（根）
+    string snapshotBaseId = 3;
+    // ReadKeyId 是读密钥的 ID
+    string readKeyId = 5;
+    // Timestamp 是本变更的创建时间戳
+    int64 timestamp = 6;
+    // Identity 是签名本变更原始载荷所用的公钥
+    bytes identity = 7;
+    // IsSnapshot 表示本变更是否包含状态快照
+    bool isSnapshot = 8;
+    // DataType 为客户端提供数据的特殊参数
+    string dataType = 9;
+}
+
+// ReducedTreeChange 是精简后的变更（只保留头节点引用）
+message ReducedTreeChange {
+    // TreeHeadIds 是本 TreeChange 的前置头节点 ID 列表
+    repeated string treeHeadIds = 1;
+}
+
+// RawTreeChange 是序列化后的 TreeChange（或 RootChange）载荷加上它的签名
+message RawTreeChange {
+    // Payload 是包含 TreeChange 的字节载荷
+    bytes payload = 1;
+    // Signature 是由 Payload 中声明的身份所做的签名
+    bytes signature = 2;
+}
+
+// RawTreeChangeWithId 是带 CID 的序列化 RawTreeChange
+message RawTreeChangeWithId {
+    // RawChange 是 RawTreeChange 的字节载荷
+    bytes rawChange = 1;
+    // Id 是由 rawChange 载荷算出的 CID（即对象 ID）
+    string id = 2;
+}
+
+// 错误码（本组区间 400–499，最终 wire 值 = 偏移 + 本地码）
+enum ErrorCodes {
+    // 未知 / 兜底错误
+    Unexpected = 0;
+    // 获取树失败
+    GetTreeError = 1;
+    // 全量同步请求失败
+    FullSyncRequestError = 2;
+    // 错误码区间基准（100..900 是 any-sync 核心区间，本组占 400）
+    ErrorOffset = 400;
+}
+
+// TreeSyncMessage 是树同步的统一消息外壳
+message TreeSyncMessage {
+    // content 是具体同步内容（四选一）
+    TreeSyncContentValue content = 1;
+    // rootChange 是这棵树的根变更（节点据此识别对象）
+    RawTreeChangeWithId rootChange = 2;
+}
+
+// TreeSyncContentValue 提供树同步的不同消息类型
+message TreeSyncContentValue {
+    oneof value {
+        // 头节点更新（推送“我有新变更”）
+        TreeHeadUpdate headUpdate = 1;
+        // 全量同步请求（拉取整棵树）
+        TreeFullSyncRequest fullSyncRequest = 2;
+        // 全量同步响应（回传整棵树）
+        TreeFullSyncResponse fullSyncResponse = 3;
+        // 错误响应
+        TreeErrorResponse errorResponse = 4;
+    }
+}
+
+// TreeHeadUpdate 是文档头节点更新时发送的消息
+message TreeHeadUpdate {
+    // heads 是当前头节点 ID
+    repeated string heads = 1;
+    // changes 是随本次更新携带的变更
+    repeated RawTreeChangeWithId changes = 2;
+    // snapshotPath 是快照路径
+    repeated string snapshotPath = 3;
+}
+
+// TreeFullSyncRequest 是文档需要全量同步时发送的消息
+message TreeFullSyncRequest {
+    // heads 是请求方已知的头节点 ID
+    repeated string heads = 1;
+    // changes 是请求方已有的变更
+    repeated RawTreeChangeWithId changes = 2;
+    // snapshotPath 是请求方的快照路径
+    repeated string snapshotPath = 3;
+    // probe 为 true 时，只向对端索取树的根与当前 heads，不返回变更体。
+    // 旧版本对端会忽略该字段并回传整棵树，因此探测方必须同时兼容两种响应形态。
+    bool probe = 4;
+}
+
+// TreeFullSyncResponse 是对某次全量同步请求的响应
+message TreeFullSyncResponse {
+    // heads 是对端当前的头节点 ID
+    repeated string heads = 1;
+    // changes 是完整的变更列表
+    repeated RawTreeChangeWithId changes = 2;
+    // snapshotPath 是对端的快照路径
+    repeated string snapshotPath = 3;
+}
+
+// TreeErrorResponse 是全量同步请求出错时返回的错误
+message TreeErrorResponse {
+    // error 是错误描述
+    string error = 1;
+    // errCode 是错误码（wire 值 = 400 + 本地码）
+    uint64 errCode = 2;
+}
+
+// TreeChangeInfo 是 Tree 实现内部用于简化序列化的结构
+message TreeChangeInfo {
+    // changeType 是变更类型
+    string changeType = 1;
+    // changePayload 是变更载荷
+    bytes changePayload = 2;
+}

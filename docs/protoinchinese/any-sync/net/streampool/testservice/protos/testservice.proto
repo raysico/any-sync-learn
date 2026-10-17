@@ -1,0 +1,24 @@
+// ============================================================
+// 源文件：src/net/streampool/testservice/protos/testservice.proto
+// 所属仓库：any-sync
+// proto 包：testService
+// 服务：Test
+// RPC 数量：2
+// 说明：由 scripts/translate-proto.py 生成；字段名、编号、类型保持原样，注释译为中文。
+// ============================================================
+
+syntax = "proto3";
+package testService;
+
+option go_package = "net/streampool/testservice";
+
+service Test {
+    rpc TestStream(stream StreamMessage) returns (stream StreamMessage);
+    rpc TestStream2(StreamMessage) returns (stream StreamMessage);
+}
+
+
+message StreamMessage {
+    string reqData = 1;
+    int64 repeat = 2;
+}

@@ -1,0 +1,37 @@
+// ============================================================
+// 源文件：src/pb/protos/snapshot.proto
+// 所属仓库：anytype-heart
+// proto 包：anytype
+// 服务：（无 service，仅 message 定义）
+// RPC 数量：0
+// 说明：由 scripts/translate-proto.py 生成；字段名、编号、类型保持原样，注释译为中文。
+// ============================================================
+
+syntax = "proto3";
+package anytype;
+option go_package = "pb";
+
+import "pkg/lib/pb/model/protos/models.proto";
+import "pb/protos/changes.proto";
+
+message SnapshotWithType {
+  anytype.model.SmartBlockType sbType = 1;
+  anytype.Change.Snapshot snapshot = 2;
+}
+
+message Profile {
+  string name = 1;
+  string avatar = 2;
+  string address = 4;
+  string spaceDashboardId = 5; // 【原文】aka homepage
+  string profileId = 6;
+  string analyticsId = 7;
+  string startingPage = 8; // 已废弃
+  repeated WidgetBlock widgets = 9;
+}
+
+message WidgetBlock {
+  model.Block.Content.Widget.Layout layout = 1;
+  string targetObjectId = 2;
+  int32 objectLimit = 3;
+}

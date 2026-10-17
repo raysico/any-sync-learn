@@ -1,0 +1,101 @@
+// ============================================================
+// 源文件：src/commonfile/fileproto/filep2p/protos/filep2p.proto
+// 所属仓库：any-sync
+// proto 包：filesyncp2p
+// 服务：FileP2P
+// RPC 数量：2
+// 说明：由 scripts/translate-proto.py 生成；字段名、编号、类型保持原样，注释译为中文。
+// ============================================================
+
+syntax = "proto3";
+package filesyncp2p;
+
+option go_package = "commonfile/fileproto/filep2p";
+
+// FileP2P 是 peer-to-peer 文件 transfer service. It 是 served
+// READ-ONLY by a client 到 other LAN peers so a device 可 fetch a file's
+// encrypted CAR 对象 directly 来自 a nearby peer ， already holds it,
+// instead 的 file-node / object-storage path — enabling local-network
+// 文件 sync, offline (无 reachable 节点) reads, and durability takeover
+// (a peer re-uploading a 文件 whose creator never made it durable).
+//
+// drpc route prefix 是 "/filesyncp2p.FileP2P/..." — DISTINCT 来自 v1
+// "/filesync.文件/..." and v2 "/filesyncv2.FileV2/...", so 所有 three 可 被
+// mounted 在 one drpc mux. Names 是 load-bearing: method paths derive 来自
+// 【原文】`package filesyncp2p` + `service FileP2P`.
+//
+// Model: a client stores one immutable, content-addressed CARv2 对象 per
+// 文件, byte-identical 到 对象 S3/public-read path serves. So a peer
+// 是 simply an ALTERNATE SOURCE 的 ， 相同 对象: ObjectRead returns 对象
+// 【原文】byte RANGES exactly like an HTTP Range GET, and the fetcher's existing
+// 随机种子（使根变更唯一）/verify path (parse 头部+索引, then verify every block against 其
+// cid) 是 reused unchanged. Because a partial local copy has holes, ObjectRead
+// 是 served 仅 by peers ， hold 文件 在 FULL; FileCheck reports 其.
+//
+// 【原文】Conventions:
+// * requests 是 ROOT-SCOPED (rootCid) — 存储 是 one CAR per root, keyed
+// by rootCid, 带有 无 global block-CID 索引;
+// * 身份 是 NEVER a 请求 字段 — it 是 authenticated connection;
+// authorization (可能 该 peer read 该 空间) 是 server's job;
+// * 对象 bytes 是 CIPHERTEXT ( 文件 layer 是 encrypted before DAG
+// 是 built), so serving them discloses 无 plaintext; FETCHER verifies
+// every block against 其 cid (nothing 在 该 wire does).
+service FileP2P {
+// 【原文】FileCheck reports, per requested rootCid, whether the server holds the
+// 文件 fully, partially, or 不 at 所有 — so a client 可 pick a FULL peer
+// 到 ObjectRead 来自 without 第一个 knowing 对象 geometry.
+    rpc FileCheck(FileCheckRequest) returns (FileCheckResponse);
+// ObjectRead returns a byte range 的 file's CARv2 对象. Mirrors an
+// HTTP Range GET: totalSize echoes whole-object 大小 (用于 head
+// probe / index-tail read). Served 仅 when 文件 是 held 在 full.
+    rpc ObjectRead(ObjectReadRequest) returns (ObjectReadResponse);
+}
+
+// ErrCodes 是 WHOLE-RPC (drpc-level) 错误, mirroring v1 filesync.ErrCodes
+// and v2's fileprotov2.ErrCodes. Wired through rpcerr.ErrGroup(ErrorOffset) 在
+// filep2perr package. 偏移 900 是 下一个 free rpcerr block (v1=200,
+// v2=800). Zero value Unexpected=0 registers at 偏移+0 so an uncoded fault
+// 【原文】reads as Unexpected.
+enum ErrCodes {
+    Unexpected = 0;      // 【原文】unclassified server fault (registry fallback)
+    Forbidden = 1;       // connection 身份 可能 不 read 该 空间
+    InvalidRequest = 2;  // 格式错误: 空 spaceId, bad rootCid, bad range
+    FileNotFound = 3;    // server does 不 hold 该 (spaceId, rootCid) 在 full
+    ErrorOffset = 900;   // rpcerr.ErrGroup base (constant, never an 错误)
+}
+
+// 【原文】---- FileCheck (availability) ---------------------------------------------
+
+message FileCheckRequest {
+    string spaceId = 1;           // 【原文】auth scope
+    repeated bytes rootCids = 2;  // 文件 到 report 在 (result match 密钥)
+}
+
+message FileCheckResponse {
+    repeated FileAvailability files = 1;  // 【原文】one per requested rootCid, keyed by rootCid
+}
+
+message FileAvailability {
+    bytes rootCid = 1;      // echoes requested rootCid (match 密钥)
+    Availability have = 2;  // how much 的 文件 server holds
+}
+
+enum Availability {
+    None = 0;     // server has 无 block 的 该 文件
+    Partial = 1;  // server has some but 不 所有 blocks (cannot ObjectRead yet)
+    Full = 2;     // server has every block; ObjectRead 将 serve
+}
+
+// 【原文】---- ObjectRead (ranged CAR bytes) ----------------------------------------
+
+message ObjectReadRequest {
+    string spaceId = 1;  // 【原文】auth scope
+    bytes rootCid = 2;   // 文件 root — selects CAR 对象 到 read 来自
+    uint64 offset = 3;   // start byte within 对象
+    uint32 length = 4;   // number 的 bytes requested 来自 偏移
+}
+
+message ObjectReadResponse {
+    bytes data = 1;        // requested bytes (short 仅 at 对象 end)
+    uint64 totalSize = 2;  // whole-object 大小 (like HTTP Content-Range total)
+}

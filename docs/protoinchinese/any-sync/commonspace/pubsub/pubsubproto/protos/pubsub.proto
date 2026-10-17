@@ -1,0 +1,106 @@
+// ============================================================
+// 源文件：src/any-sync/commonspace/pubsub/pubsubproto/protos/pubsub.proto
+// 所属仓库：any-sync ｜ proto 包：pubsub ｜ 错误码区间：1100–1199
+// 说明：空间内“无状态发布/订阅”。独立的 DRPC 双向流，与对象同步流完全隔离；
+//       消息不落盘、至多一次；payload 用空间读密钥加密、账户密钥签名。
+//       服务端实现见 any-sync-node/nodespace/pubsubrelay。
+// ============================================================
+
+syntax = "proto3";
+package pubsub;
+
+option go_package = "commonspace/pubsub/pubsubproto";
+
+service PubSub {
+    // PubSubStream 是长期存在的双向流，复用同一连接传输所有空间与主题
+    rpc PubSubStream(stream PubSubMessage) returns (stream PubSubMessage);
+}
+
+// 错误码（区间 1100–1199）
+enum ErrCodes {
+    // 零值：表示错误，避免“未设置也当成功”
+    Unexpected = 0;
+    // 该身份在空间 ACL 中没有任何权限
+    NotAMember = 1;
+    // 该节点不负责这个空间
+    NotResponsible = 2;
+    // 超出每 peer 的发布速率限制
+    RateLimited = 3;
+    // 超出每条流或每个空间的主题模式数量上限
+    TooManyTopics = 4;
+    // 帧格式错误、载荷超大、身份不匹配或签名无效
+    InvalidMessage = 5;
+    // 以非主题属主的身份向 acc/ 命名空间发布
+    TopicNotOwned = 6;
+    // 主题或模式格式错误：通配符位置、保留字符、非规范形式
+    InvalidTopic = 7;
+    // 本 proto 包占用的错误码区间（100..900 已被核心占用，pubsub 用 1100）
+    ErrorOffset = 1100;
+}
+
+// PubSubMessage 是 PubSubStream 上传输的唯一帧类型
+message PubSubMessage {
+    oneof content {
+        // 订阅
+        Subscribe subscribe = 1;
+        // 退订
+        Unsubscribe unsubscribe = 2;
+        // 发布
+        Publish publish = 3;
+        // 状态（仅在被拒绝时下发）
+        Status status = 4;
+    }
+}
+
+// Subscribe 把主题模式加入该流的兴趣集合。
+// 模式可含通配符：'*' 匹配恰好一个段，'>' 匹配一个或多个尾部段（只能位于末尾）
+message Subscribe {
+    // 空间 ID
+    string spaceId = 1;
+    // 主题模式列表
+    repeated string topics = 2;
+}
+
+// Unsubscribe 从兴趣集合中移除模式（按字面匹配，不做展开）；
+// topics 为空表示移除该空间的全部模式
+message Unsubscribe {
+    // 空间 ID
+    string spaceId = 1;
+    // 主题模式列表
+    repeated string topics = 2;
+}
+
+// Publish 携带一条发往完整主题的、即发即忘的临时消息
+message Publish {
+    // 空间 ID
+    string spaceId = 1;
+    // topic 是完整（不含通配符）的 '/' 分隔主题
+    string topic = 2;
+    // msgId 是发布者生成的 16 字节随机数，用于去重
+    bytes msgId = 3;
+    // keyId 是用于加密载荷的空间读密钥 ID；为空表示明文（无密钥空间）
+    string keyId = 4;
+    // payload 是密文；当 keyId 为空时为明文
+    bytes payload = 5;
+    // identity 是发送者账户公钥（序列化后）
+    bytes identity = 6;
+    // signature 是账户密钥签名，覆盖
+    // "anysync:pubsub:v1" | spaceId | topic | msgId | keyId | le64(timestampMilli) | payload
+    bytes signature = 7;
+    // timestampMilli 是发送方墙上时钟，仅供参考
+    int64 timestampMilli = 8;
+    // relayed 由节点在节点间转发时置位；已转发的消息不再转发；不参与签名
+    bool relayed = 9;
+}
+
+// Status 是服务端在拒绝订阅或发布时下发的消息；成功时静默
+message Status {
+    // 空间 ID
+    string spaceId = 1;
+    // 回显被拒绝的模式（被拒绝的发布则回显其主题）
+    repeated string topics = 2;
+    // 错误码
+    ErrCodes code = 3;
+    // msgId 回显被拒绝发布的 ID 以便关联；订阅被拒时为空
+    bytes msgId = 4;
+}

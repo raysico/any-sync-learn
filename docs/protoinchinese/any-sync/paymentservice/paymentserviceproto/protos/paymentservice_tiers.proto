@@ -1,0 +1,95 @@
+// ============================================================
+// 源文件：src/paymentservice/paymentserviceproto/protos/paymentservice_tiers.proto
+// 所属仓库：any-sync
+// proto 包：（无）
+// 服务：（无 service，仅 message 定义）
+// RPC 数量：0
+// 说明：由 scripts/translate-proto.py 生成；字段名、编号、类型保持原样，注释译为中文。
+// ============================================================
+
+syntax = "proto3";
+option go_package = "paymentservice/paymentserviceproto";
+
+
+enum PeriodType {
+  PeriodTypeUnknown = 0;
+  PeriodTypeUnlimited = 1;
+  PeriodTypeDays = 2;
+  PeriodTypeWeeks = 3;
+  PeriodTypeMonths = 4;
+  PeriodTypeYears = 5;
+}
+
+message Feature {
+  string description = 1;
+}
+
+message GetTiersRequest {
+// 在 following format: "A5k2d9sFZw84yisTxRnz2bPRd1YPfVfhxqymZ6yESprFTG65"
+// you 可 get it 带有 账户().SignKey.GetPublic().账户()
+  string ownerAnyId = 1;
+
+  string locale = 2;
+
+  string version = 3;
+}
+
+message GetTiersRequestSigned {
+// 【原文】GetTiersRequest struct
+  bytes payload = 1;
+// 该 是 载荷 signed 带有 载荷.ownerAnyID
+  bytes signature = 2;
+}
+
+message TierData {
+// 该 是 a unique ID 的 tier
+// you 应当 hardcode 该 在 your app and provide icon, graphics, etc 用于 每个 tier
+// (even 用于 旧/historical/inactive/hidden tiers)
+  uint32 id = 1;
+// localazied name 的 tier
+  string name = 2;
+// 【原文】just a short technical description
+// you don't have 到 use it, you 可 use your own UI-friendly texts
+  string description = 3;
+// 可 you buy it (在 所有 PLATFORMS, without clarification)?
+  bool isActive = 4;
+// 是 该 tier 用于 debugging 仅?
+  bool isTest = 5;
+// hidden tiers 是 仅 visible once 用户 got them
+  bool isHiddenTier = 6;
+// how long 是 period 的 subscription
+  PeriodType periodType = 7;
+// 【原文】i.e. "5 days" or "3 years"
+  uint32 periodValue = 8;
+// 该 one 是 a price we use 仅 在 Stripe platform
+  uint32 priceStripeUsdCents = 9;
+// number 的 任意 NS names ， 该 tier includes
+// (不 counted as a "feature" and 不 在 features 列表)
+  uint32 anyNamesCountIncluded = 10;
+// somename.任意 - len 的 8
+  uint32 anyNameMinLength = 11;
+// 每个 tier has a set 的 features
+  repeated Feature features = 12;
+// green, blue, red, purple or custom color 在 string format #ff00ff
+  string colorStr = 13;
+
+// 【原文】Stripe platform-specific data:
+  string stripeProductId = 14;
+  string stripeManageUrl = 15;
+
+// 【原文】iOS platform-specific data:
+  string iosProductId = 16;
+  string iosManageUrl = 17;
+
+// 【原文】Android platform-specific data:
+  string androidProductId = 18;
+  string androidManageUrl = 19;
+
+// 【原文】something like "limited offer", etc
+  string offer = 20;
+}
+
+message GetTiersResponse {
+// 列表 的 所有 available tiers
+  repeated TierData tiers = 1;
+}

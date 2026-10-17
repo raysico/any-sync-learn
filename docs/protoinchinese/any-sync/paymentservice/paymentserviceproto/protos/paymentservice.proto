@@ -1,0 +1,377 @@
+// ============================================================
+// 源文件：src/paymentservice/paymentserviceproto/protos/paymentservice.proto
+// 所属仓库：any-sync
+// proto 包：（无）
+// 服务：AnyPaymentProcessing
+// RPC 数量：11
+// 说明：由 scripts/translate-proto.py 生成；字段名、编号、类型保持原样，注释译为中文。
+// ============================================================
+
+syntax = "proto3";
+option go_package = "paymentservice/paymentserviceproto";
+
+import "paymentservice/paymentserviceproto/protos/paymentservice_tiers.proto";
+
+// 待办:
+// later we 将 have an interface 到 enumerate 所有 available tiers
+// it's a bad idea 到 列表 them here, because interface 将 被 changed often
+enum SubscriptionTier {
+  TierUnknown = 0;
+// 【原文】"free" tier
+  TierExplorer = 1;
+
+// 这些 可 被 使用 just 用于 testing 在 debug mode
+// it 将 still create an active subscription, but 带有 无 features
+  TierBuilder1WeekTEST = 2;
+  TierCoCreator1WeekTEST = 3;
+
+// 这些 是 real tiers:
+  TierBuilder1Year = 4;
+  TierCoCreator1Year = 5;
+
+  TierBuilderPlus = 6;
+  TierAnytypeTeam = 7;
+}
+
+enum SubscriptionStatus {
+  StatusUnknown = 0;
+// payment 是 still pending
+// 该 将 被 状态 until payment 是 confirmed or N 是 elapsed and 无 payment 是 received
+// 在 最后一个 case subscription 将 switch 到 状态_Unknown or 状态_Active
+  StatusPending = 1;
+  StatusActive = 2;
+// when buying 来自 other side - some data 是 missing 在 Subscription
+// we need 到 provide additional data after payment
+// please call FinalizeSubscription 到 fill-in needed fields
+  StatusPendingRequiresFinalization = 3;
+}
+
+enum PaymentMethod {
+  MethodCard = 0;
+  MethodCrypto = 1;
+  MethodApplePay = 2;
+  MethodGooglePay = 3;
+  MethodAppleInapp = 4;
+  MethodGoogleInapp = 5;
+  MethodNone = 6;
+}
+
+message GetSubscriptionRequest {
+// 在 following format: "A5k2d9sFZw84yisTxRnz2bPRd1YPfVfhxqymZ6yESprFTG65"
+// you 可 get it 带有 账户().SignKey.GetPublic().账户()
+  string ownerAnyID = 1;
+}
+
+message GetSubscriptionRequestSigned {
+// 【原文】GetSubscriptionRequest
+  bytes payload = 1;
+// 该 是 载荷 signed 带有 载荷.ownerAnyID
+  bytes signature = 2;
+}
+
+message GetSubscriptionResponse {
+// 曾是 SubscriptionTier before, changed 到 uint32 到 allow us 到 use dynamic tiers
+  uint32 tier = 1;
+  SubscriptionStatus status = 2;
+  uint64 dateStarted = 3;
+  uint64 dateEnds = 4;
+  bool isAutoRenew = 5;
+  PaymentMethod paymentMethod = 6;
+  string requestedAnyName = 7;
+// 如果 用户 verified her email OR provided it while buying a subscription, it 将 被 here
+  string userEmail = 8;
+  bool subscribeToNewsletter = 9;
+}
+
+message BuySubscriptionRequest {
+// 在 following format: "A5k2d9sFZw84yisTxRnz2bPRd1YPfVfhxqymZ6yESprFTG65"
+// you 可 get it 带有 账户().SignKey.GetPublic().账户()
+  string ownerAnyId = 1;
+// 该 是 owner's main EOA (Externally Owned 账户) address
+// 不 AccountAbstraction's SCW (Smart Contract Wallet) address!
+// 该 是 必需 到 reserve a name 用于 owner (later ， 是 done by 用户)
+// 在 following format: "0x7a250d5630b4cf539739df2c5dacb4c659f2488d"
+  string ownerEthAddress = 2;
+// 曾是 SubscriptionTier before, changed 到 uint32 到 allow us 到 use dynamic tiers
+  uint32 requestedTier = 3;
+  PaymentMethod paymentMethod = 4;
+// 如果 空 - then 无 name requested
+// 如果 non-empty - PP 节点 将 register ， name 在 behalf 的 用户
+  string requestedAnyName = 5;
+// 用于 some payment methods we need 到 know user's email
+  string userEmail = 6;
+}
+
+message BuySubscriptionRequestSigned {
+// 【原文】BuySubscriptionRequest
+  bytes payload = 1;
+// 该 是 载荷 signed 带有 载荷.ownerAnyID
+  bytes signature = 2;
+}
+
+message BuySubscriptionResponse {
+// 将 feature 当前 billing ID
+// 【原文】stripe.com/?client_reference_id=1234
+  string paymentUrl = 1;
+// billingID 是 passed via mobile client 到 payment platform
+  string billingID = 2;
+}
+
+message FinalizeSubscriptionRequest {
+// 在 following format: "A5k2d9sFZw84yisTxRnz2bPRd1YPfVfhxqymZ6yESprFTG65"
+// you 可 get it 带有 账户().SignKey.GetPublic().账户()
+  string ownerAnyId = 1;
+// 该 是 owner's main EOA (Externally Owned 账户) address
+// 不 AccountAbstraction's SCW (Smart Contract Wallet) address!
+// 该 是 必需 到 reserve a name 用于 owner (later ， 是 done by 用户)
+// 在 following format: "0x7a250d5630b4cf539739df2c5dacb4c659f2488d"
+  string ownerEthAddress = 2;
+// 如果 空 - then 无 name requested
+  string requestedAnyName = 3;
+}
+
+message FinalizeSubscriptionResponse {
+  
+}
+
+message FinalizeSubscriptionRequestSigned {
+// 【原文】VerifyEmailRequest
+  bytes payload = 1;
+// 该 是 载荷 signed 带有 载荷.ownerAnyID
+  bytes signature = 2;
+}
+
+message GetSubscriptionPortalLinkRequest {
+// 在 following format: "A5k2d9sFZw84yisTxRnz2bPRd1YPfVfhxqymZ6yESprFTG65"
+// you 可 get it 带有 账户().SignKey.GetPublic().账户()
+  string ownerAnyId = 1;
+}
+
+message GetSubscriptionPortalLinkRequestSigned {
+// 【原文】GetSubscriptionPortalLinkRequest
+  bytes payload = 1;
+// 该 是 载荷 signed 带有 载荷.ownerAnyID
+  bytes signature = 2;
+}
+
+message GetSubscriptionPortalLinkResponse {
+  string portalUrl = 1;
+}
+
+message GetVerificationEmailRequest {
+// 在 following format: "A5k2d9sFZw84yisTxRnz2bPRd1YPfVfhxqymZ6yESprFTG65"
+// you 可 get it 带有 账户().SignKey.GetPublic().账户()
+  string ownerAnyId = 1;
+  string email = 2;
+  bool subscribeToNewsletter = 3;
+  bool insiderTipsAndTutorials = 4;
+// 如果 we 是 coming 来自 onboarding screen
+  bool isOnboardingList = 5;
+}
+
+message GetVerificationEmailResponse {
+  
+}
+
+message GetVerificationEmailRequestSigned {
+// 【原文】GetVerificationEmailRequest
+  bytes payload = 1;
+// 该 是 载荷 signed 带有 载荷.ownerAnyID
+  bytes signature = 2;
+}
+
+message VerifyEmailRequest {
+// 在 following format: "A5k2d9sFZw84yisTxRnz2bPRd1YPfVfhxqymZ6yESprFTG65"
+// you 可 get it 带有 账户().SignKey.GetPublic().账户()
+  string ownerAnyId = 1;
+// 该 是 owner's main EOA (Externally Owned 账户) address
+// 不 AccountAbstraction's SCW (Smart Contract Wallet) address!
+// 该 是 必需 到 reserve a name 用于 owner (later ， 是 done by 用户)
+// 在 following format: "0x7a250d5630b4cf539739df2c5dacb4c659f2488d"
+  string ownerEthAddress = 2;
+// 代码 received 在 email
+  string code = 3;
+}
+
+message VerifyEmailResponse {
+  bool success = 1;
+}
+
+message VerifyEmailRequestSigned {
+// 【原文】VerifyEmailRequest
+  bytes payload = 1;
+// 该 是 载荷 signed 带有 载荷.ownerAnyID
+  bytes signature = 2;
+}
+
+message IsNameValidRequest {
+  uint32 requestedTier = 1;
+  string requestedAnyName = 2;
+}
+
+message IsNameValidResponse {
+  Code code = 1;
+  string description = 2;
+
+  enum Code {
+      Valid = 0;
+      NoDotAny = 1;
+      TooShort = 2;
+      TooLong = 3;
+      HasInvalidChars = 4;
+      TierFeatureNoName = 5;
+      CanNotReserve = 6;
+// 如果 everything 是 fine - "name 是 already taken" check 应当 被 done 在 NS
+// 【原文】see IsNameAvailable()
+  }
+}
+
+message VerifyAppStoreReceiptRequest {
+// 在 following format: "A5k2d9sFZw84yisTxRnz2bPRd1YPfVfhxqymZ6yESprFTG65"
+// you 可 get it 带有 账户().SignKey.GetPublic().账户()
+  string ownerAnyId = 1;
+// receipt 是 a JWT-encoded information about subscription purchase
+  string receipt = 2;
+}
+
+message VerifyAppStoreReceiptRequestSigned {
+// 【原文】VerifyAppStoreReceiptRequest
+  bytes payload = 1;
+// 该 是 载荷 signed 带有 载荷.ownerAnyID
+  bytes signature = 2;
+}
+
+message VerifyAppStoreReceiptResponse {
+  
+}
+
+message CodeGetInfoRequest {
+// 在 following format: "A5k2d9sFZw84yisTxRnz2bPRd1YPfVfhxqymZ6yESprFTG65"
+// you 可 get it 带有 账户().SignKey.GetPublic().账户()
+  string ownerAnyId = 1;
+// 该 是 owner's main EOA (Externally Owned 账户) address
+// 不 AccountAbstraction's SCW (Smart Contract Wallet) address!
+// 该 是 必需 到 reserve a name 用于 owner (later ， 是 done by 用户)
+// 在 following format: "0x7a250d5630b4cf539739df2c5dacb4c659f2488d"
+  string ownerEthAddress = 2;
+// 代码 received 在 email
+  string code = 3;
+}
+
+message CodeGetInfoRequestSigned {
+// 【原文】CodeGetInfoRequest
+  bytes payload = 1;
+// 该 是 载荷 signed 带有 载荷.ownerAnyID
+  bytes signature = 2;
+}
+
+message CodeGetInfoResponse {
+  uint32 tier = 1;
+}
+
+message CodeRedeemRequest {
+// 在 following format: "A5k2d9sFZw84yisTxRnz2bPRd1YPfVfhxqymZ6yESprFTG65"
+// you 可 get it 带有 账户().SignKey.GetPublic().账户()
+  string ownerAnyId = 1;
+// 该 是 owner's main EOA (Externally Owned 账户) address
+// 不 AccountAbstraction's SCW (Smart Contract Wallet) address!
+// 该 是 必需 到 reserve a name 用于 owner (later ， 是 done by 用户)
+// 在 following format: "0x7a250d5630b4cf539739df2c5dacb4c659f2488d"
+  string ownerEthAddress = 2;
+// 如果 空 - then 无 name requested
+  string requestedAnyName = 3;
+// 代码 received 在 email
+  string code = 4;
+}
+
+message CodeRedeemRequestSigned {
+// 【原文】CodeRedeemRequest
+  bytes payload = 1;
+// 该 是 载荷 signed 带有 载荷.ownerAnyID
+  bytes signature = 2;
+}
+
+message CodeRedeemResponse {
+  bool success = 1;
+}
+
+enum ErrorCodes {
+  Unexpected = 0;
+
+  EthAddressEmpty = 1;
+  InvalidSignature = 2;
+  TierWrong = 3;
+  TierNotFound = 4;
+  TierInactive = 5;
+  PaymentMethodWrong = 6;
+  BadAnyName = 7;
+  Unknown = 8;
+
+  SubsAlreadyActive = 9;
+  SubsNotFound = 10;
+  SubsWrongState = 11;
+
+  EmailWrongFormat = 12;
+  EmailAlreadyVerified = 13;
+  EmailAlreadySent = 14;
+  EmailFailedToSend = 15;
+  EmailExpired = 16;
+  EmailWrongCode = 17;
+
+  AppleInvalidReceipt = 18;
+  ApplePurchaseRegistration = 19;
+  AppleSubscriptionRenew = 20;
+
+  CodeNotFound = 21;
+  CodeAlreadyUsed = 22;
+
+  ErrorOffset = 600;
+}
+
+// 【原文】NOTICE:
+// 1 - 用户 可 不 ask 用于 a payment/other links 在 behalf 的 another 用户 (a 签名 是 必需)
+// 2 - Admin 可 do ， 在 behalf 的 任意 用户
+service AnyPaymentProcessing {
+  rpc GetSubscriptionStatus(GetSubscriptionRequestSigned) returns (GetSubscriptionResponse) {}
+
+// Check 如果 requested name 是 valid 用于 requested tier
+// 【原文】before requesting a payment link and paying
+  rpc IsNameValid(IsNameValidRequest) returns (IsNameValidResponse) {}
+
+// Save a 新 BillingID 到 DB, and return a payment link.
+// You 可 call BuySubscription multiple times even 如果 当前 payment 是 不 processed yet
+// (到 get 新 payment link).
+// 如果 用户 has already an active subscription, then 该 将 return an 错误.
+  rpc BuySubscription(BuySubscriptionRequestSigned) returns (BuySubscriptionResponse) {}
+
+// 如果 your subscription 是 在 StatusPendingRequiresFinalization, then you need 到 call 该 method
+  rpc FinalizeSubscription(FinalizeSubscriptionRequestSigned) returns (FinalizeSubscriptionResponse) {}
+
+// Generate a link 到 portal where 用户 可:
+// 【原文】a) change her billing details
+// 【原文】b) see payment info, invoices, etc
+// 【原文】c) cancel/renew the subscription
+  rpc GetSubscriptionPortalLink(GetSubscriptionPortalLinkRequestSigned) returns (GetSubscriptionPortalLinkResponse) {}
+
+// Verify user's email: 1st step - get a verification link 到 email
+// 将 fail 如果 already verified, i.e. you 可 不 change your email
+  rpc GetVerificationEmail(GetVerificationEmailRequestSigned) returns (GetVerificationEmailResponse) {}
+  
+// Enter 代码 来自 email
+// 将 fail 如果: link 曾是 不 requested, link 是 expired, 如果 email 是 already verified
+  rpc VerifyEmail(VerifyEmailRequestSigned) returns (VerifyEmailResponse) {}
+
+// Returns 所有 available application tiers, including inactive
+// 1 - 该 列表 does 不 depend 在 当前 platform (iOS, Android, Desktop)
+// 2 - 该 列表 可 被 different 用于 different 用户, based 在 their 账户 ID
+// 3 - 用户 可 不 buy stripe
+// 4 - some tiers 是 custom ()
+  rpc GetAllTiers(GetTiersRequestSigned) returns (GetTiersResponse) {}
+
+// Verify purchase 在 case subscription 曾是 bought via AppStore
+// Incoming receipt contains 所有 information 到 register purchase 在 Payment 节点
+  rpc VerifyAppStoreReceipt(VerifyAppStoreReceiptRequestSigned) returns (VerifyAppStoreReceiptResponse) {}
+
+  rpc CodeGetInfo(CodeGetInfoRequestSigned) returns (CodeGetInfoResponse) {}
+  rpc CodeRedeem(CodeRedeemRequestSigned) returns (CodeRedeemResponse) {}
+}

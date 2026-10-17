@@ -1,0 +1,70 @@
+// ============================================================
+// 源文件：src/any-sync/identityrepo/identityrepoproto/protos/identityrepo.proto
+// 所属仓库：any-sync ｜ proto 包：identityRepo
+// 说明：身份数据仓库：存放/读取与某个身份绑定的数据（例如节点自身信息）。
+// ============================================================
+
+syntax = "proto3";
+package identityRepo;
+
+option go_package = "identityrepo/identityrepoproto";
+
+service IdentityRepo {
+  // DataPut：写入客户端数据
+  rpc DataPut(DataPutRequest) returns (Ok);
+  // DataDelete：删除客户端数据
+  rpc DataDelete(DataDeleteRequest) returns (Ok);
+  // DataPull：拉取客户端数据
+  rpc DataPull(DataPullRequest) returns (DataPullResponse);
+}
+
+// Data 是一条身份数据
+message Data {
+  // kind 表示数据类型（任意字符串）
+  string kind = 1;
+  // data 是字节载荷
+  bytes data = 2;
+  // 数据签名
+  bytes signature = 3;
+}
+
+// DataWithIdentity 是某个身份的全部数据
+message DataWithIdentity {
+  // 身份
+  string identity = 1;
+  // 数据列表
+  repeated Data data = 2;
+}
+
+// DataPutRequest 写入请求
+message DataPutRequest {
+  // 身份字符串，必须与握手结果一致
+  string identity = 1;
+  // 要保存的数据
+  repeated Data data = 2;
+}
+
+// DataDeleteRequest 删除请求
+message DataDeleteRequest {
+  // 身份字符串，必须与握手结果一致
+  string identity = 1;
+  // 要删除的数据类型；为空表示删除全部类型
+  repeated string kinds = 2;
+}
+
+// DataPullRequest 拉取请求
+message DataPullRequest {
+  // 想获取的身份列表
+  repeated string identities = 1;
+  // 想获取的数据类型
+  repeated string kinds = 2;
+}
+
+// DataPullResponse 拉取响应
+message DataPullResponse {
+  repeated DataWithIdentity data = 1;
+}
+
+
+// Ok 是空成功响应
+message Ok {}

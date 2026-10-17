@@ -1,0 +1,27 @@
+// ============================================================
+// 源文件：src/any-sync/util/crypto/cryptoproto/protos/crypto.proto
+// 所属仓库：any-sync ｜ proto 包：crypto
+// 说明：密钥的序列化封装，用于在配置与协议中传递公私钥。
+// ============================================================
+
+syntax = "proto3";
+package crypto;
+option go_package = "util/crypto/cryptoproto";
+
+// 密钥类型
+enum KeyType {
+    // Ed25519 公钥
+    Ed25519Public = 0;
+    // Ed25519 私钥
+    Ed25519Private = 1;
+    // AES 对称密钥（空间读密钥）
+    AES = 2;
+}
+
+// Key 是带类型的密钥封装
+message Key {
+    // 密钥类型
+    KeyType Type = 1;
+    // 密钥数据（原始字节）
+    bytes Data = 2;
+}

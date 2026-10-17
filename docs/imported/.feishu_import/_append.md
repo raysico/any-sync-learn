@@ -1,0 +1,163 @@
+#### `MembershipV2.ProductStatus`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated Status` | `status` |  |
+
+#### `MembershipV2.PurchaseInfo`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated uint64` | `dateStarted` |  |
+| 2 | `repeated uint64` | `dateEnds` |  |
+| 3 | `repeated bool` | `isAutoRenew` |  |
+| 4 | `repeated Period` | `period` |  |
+| 5 | `repeated uint64` | `dateTrialEnds` | 0 = not in a trial. Otherwise the Unix timestamp when the free trial ends, which is also when the first real invoice is charged. |
+
+#### `MembershipV2.PurchasedProduct`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated Product` | `product` |  |
+| 2 | `repeated PurchaseInfo` | `purchaseInfo` |  |
+| 3 | `repeated ProductStatus` | `productStatus` |  |
+
+#### `MembershipV2.StoreCartCheckoutRequest`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+
+#### `MembershipV2.StoreCartCheckoutResponse`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `paymentUrl` | for new customers - will contain a payment URL (new Stripe session)  if this is empty - then this is existing customer and we are trying to process the payment |
+
+#### `MembershipV2.StoreCartClearRequest`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+
+#### `MembershipV2.StoreCartGetRequest`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+
+#### `MembershipV2.StoreCartGetResponse`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated MembershipV2.Cart` | `cart` |  |
+
+#### `MembershipV2.StoreCartPromocodeApplyRequest`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `promocode` |  |
+
+#### `MembershipV2.StoreCartUpdateRequest`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated CartProduct` | `products` |  |
+| 2 | `repeated string` | `ownerEthAddress` |  |
+| 3 | `repeated string` | `promocodes` |  |
+
+#### `MembershipV2.StoreCartUpdateResponse`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated MembershipV2.Cart` | `cart` |  |
+
+#### `MembershipV2.SubscribeToUpdatesRequest`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `email` |  |
+| 2 | `repeated Platform` | `platform` |  |
+| 3 | `repeated bool` | `subscribe` | if false - unsubscribe |
+| 4 | `repeated string` | `context` | additional data |
+
+#### `MembershipV2.SubscribeToUpdatesResponse`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+
+#### `MembershipV2.WebAuthRequest`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+
+#### `MembershipV2.WebAuthResponse`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `jwt` |  |
+| 2 | `repeated string` | `url` | (optional) redirect here after the auth |
+
+
+### any-sync/paymentservice/paymentserviceproto/protos/paymentservice_tiers.proto
+
+#### `Feature`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `description` |  |
+
+#### `GetTiersRequest`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `ownerAnyId` | in the following format: "A5k2d9sFZw84yisTxRnz2bPRd1YPfVfhxqymZ6yESprFTG65" you can get it with Account().SignKey.GetPublic().Account() |
+| 2 | `repeated string` | `locale` |  |
+| 3 | `repeated string` | `version` |  |
+
+#### `GetTiersRequestSigned`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated bytes` | `payload` | GetTiersRequest struct |
+| 2 | `repeated bytes` | `signature` | this is payload signed with payload.ownerAnyID |
+
+#### `GetTiersResponse`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated TierData` | `tiers` | list of all available tiers |
+
+#### `TierData`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated uint32` | `id` | this is a unique ID of the tier you should hardcode this in your app and provide icon, graphics, etc for each tier (even for old/historical/inactive/hidden tiers) |
+| 2 | `repeated string` | `name` | localazied name of the tier |
+| 3 | `repeated string` | `description` | just a short technical description you don't have to use it, you can use your own UI-friendly texts |
+| 4 | `repeated bool` | `isActive` | can you buy it (ON ALL PLATFORMS, without clarification)? |
+| 5 | `repeated bool` | `isTest` | is this tier for debugging only? |
+| 6 | `repeated bool` | `isHiddenTier` | hidden tiers are only visible once user got them |
+| 7 | `repeated PeriodType` | `periodType` | how long is the period of the subscription |
+| 8 | `repeated uint32` | `periodValue` | i.e. "5 days" or "3 years" |
+| 9 | `repeated uint32` | `priceStripeUsdCents` | this one is a price we use ONLY on Stripe platform |
+| 10 | `repeated uint32` | `anyNamesCountIncluded` | number of ANY NS names that this tier includes (not counted as a "feature" and not in the features list) |
+| 11 | `repeated uint32` | `anyNameMinLength` | somename.any - len of 8 |
+| 12 | `repeated Feature` | `features` | each tier has a set of features |
+| 13 | `repeated string` | `colorStr` | green, blue, red, purple or custom color in string format #ff00ff |
+| 14 | `repeated string` | `stripeProductId` | Stripe platform-specific data: |
+| 15 | `repeated string` | `stripeManageUrl` |  |
+| 16 | `repeated string` | `iosProductId` | iOS platform-specific data: |
+| 17 | `repeated string` | `iosManageUrl` |  |
+| 18 | `repeated string` | `androidProductId` | Android platform-specific data: |
+| 19 | `repeated string` | `androidManageUrl` |  |
+| 20 | `repeated string` | `offer` | something like "limited offer", etc |
+
+
+### any-sync/util/crypto/cryptoproto/protos/crypto.proto
+
+#### `Key`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated KeyType` | `Type` |  |
+| 2 | `repeated bytes` | `Data` |  |
+
+

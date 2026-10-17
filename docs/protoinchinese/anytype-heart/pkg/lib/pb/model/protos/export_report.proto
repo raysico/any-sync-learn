@@ -1,0 +1,48 @@
+// ============================================================
+// 源文件：src/pkg/lib/pb/model/protos/export_report.proto
+// 所属仓库：anytype-heart
+// proto 包：anytype.model
+// 服务：（无 service，仅 message 定义）
+// RPC 数量：0
+// 说明：由 scripts/translate-proto.py 生成；字段名、编号、类型保持原样，注释译为中文。
+// ============================================================
+
+syntax = "proto3";
+package anytype.model;
+option go_package = "pkg/lib/pb/model";
+
+// Diagnostics shared by 所有 export formats. A completed export 可 contain
+// issues without failing RPC; clients 应当 inspect 状态 and issues.
+message ExportReport {
+    enum Status {
+        SUCCESS = 0;
+// Output 曾是 produced, but 错误 曾是 reported. Warnings alone remain successful.
+        PARTIAL = 1;
+        FAILED = 2;
+        CANCELED = 3;
+    }
+    Status status = 1;
+// 对象 accounted 用于, including 对象 represented 在 bundle metadata.
+    int32 succeed = 2;
+    int32 objectErrors = 3;
+// 文件 contents ， could 不 被 exported; their 对象 可能 still succeed.
+    int32 fileErrors = 4;
+    repeated Issue issues = 5;
+
+    message Issue {
+        enum Severity {
+            WARNING = 0;
+            ERROR = 1;
+// Non-blocking format notes; do 不 make export partial.
+            INFO = 2;
+        }
+// 空 用于 an issue affecting export as a whole.
+        string objectId = 1;
+        Severity severity = 2;
+// Stable diagnostic 代码, supplied by exporter when available.
+        string code = 3;
+// 字段 path 用于 validation issues, or relative path 的 an export 文件.
+        string path = 4;
+        string message = 5;
+    }
+}

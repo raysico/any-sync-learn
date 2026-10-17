@@ -1,0 +1,403 @@
+// ============================================================
+// 源文件：src/any-sync/commonspace/spacesyncproto/protos/spacesync.proto
+// 所属仓库：any-sync ｜ proto 包：spacesync ｜ 错误码区间：100–199
+// 说明：空间同步的核心服务。网络侧只负责「推送空间」「同步头」「交换差异」，
+//       不理解对象的具体含义（库/记录由应用自己定义）。
+// ============================================================
+
+syntax = "proto3";
+package spacesync;
+
+option go_package = "commonspace/spacesyncproto";
+
+// 错误码（区间 100–199，wire 值 = 100 + 本地码）
+enum ErrCodes {
+    // 未知 / 兜底
+    Unexpected = 0;
+    // 空间不存在
+    SpaceMissing = 1;
+    // 空间已存在
+    SpaceExists = 2;
+    // 空间不在缓存中
+    SpaceNotInCache = 3;
+    // 空间已被删除
+    SpaceIsDeleted = 4;
+    // 对方 peer 不负责该空间
+    PeerIsNotResponsible = 5;
+    // 回执无效
+    ReceiptIsInvalid = 6;
+    // 载荷无效
+    InvalidPayload = 7;
+    // 重复请求
+    DuplicateRequest = 8;
+    // 该 peer 的请求过多
+    TooManyRequestsFromPeer = 9;
+    // 错误码区间基准（核心区间 100..900 已满，本组占 100）
+    ErrorOffset = 100;
+}
+
+// 空间同步服务：DRPC 协议（非标准 gRPC）
+service SpaceSync {
+    // HeadSync：比较空间中所有对象及其哈希（发现差异）
+    rpc HeadSync(HeadSyncRequest) returns (HeadSyncResponse);
+    // StoreDiff：比较空间中所有对象的存储差异
+    rpc StoreDiff(StoreDiffRequest) returns (StoreDiffResponse);
+    // StoreElements：双向流交换存储元素
+    rpc StoreElements(stream StoreKeyValue) returns (stream StoreKeyValue);
+    // SpacePush：向节点推送一个新空间（仅含一条 ACL 记录）
+    rpc SpacePush(SpacePushRequest) returns (SpacePushResponse);
+    // SpacePull：从远端节点拉取空间（头部 + ACL 记录）
+    rpc SpacePull(SpacePullRequest) returns (SpacePullResponse);
+    // ObjectSyncStream：与服务端/客户端建立长期对象同步流（双向）
+    rpc ObjectSyncStream(stream ObjectSyncMessage) returns (stream ObjectSyncMessage);
+    // ObjectSync：发送一条对象同步消息并同步获取响应（已废弃，实际返回 deprecated）
+    rpc ObjectSync(ObjectSyncMessage) returns (ObjectSyncMessage);
+    // ObjectSyncRequestStream：发送一个请求并接收流式响应（拉取用）
+    rpc ObjectSyncRequestStream(ObjectSyncMessage) returns (stream ObjectSyncMessage);
+    // AclAddRecord：向 ACL 日志追加记录（仅 any-sync-node；已废弃，改用 coordinator API）
+    rpc AclAddRecord(AclAddRecordRequest) returns (AclAddRecordResponse);
+    // AclGetRecords：获取 ACL 记录（已废弃，改用 coordinator API）
+    rpc AclGetRecords(AclGetRecordsRequest) returns (AclGetRecordsResponse);
+}
+
+// HeadSyncRange 表示一次范围查询
+message HeadSyncRange {
+    // 范围起点
+    uint64 from = 1;
+    // 范围终点
+    uint64 to = 2;
+    // 返回元素上限
+    uint32 limit = 3;
+    // 是否返回元素明细（false 只返回范围哈希）
+    bool elements = 4;
+}
+
+// HeadSyncResult 是某个范围的响应
+message HeadSyncResult {
+    // 该范围内元素的整体哈希
+    bytes hash = 1;
+    // 元素明细（对象 ID 与头哈希）
+    repeated HeadSyncResultElement elements = 2;
+    // 元素数量
+    uint32 count = 3;
+}
+
+// HeadSyncResultElement 表示单个对象的状态
+message HeadSyncResultElement {
+    // 对象 ID（即该对象根变更的 CID）
+    string id = 1;
+    // 对象当前头节点的哈希
+    string head = 2;
+}
+
+// HeadSyncRequest 是 HeadSync 的请求
+message HeadSyncRequest {
+    // 空间 ID
+    string spaceId = 1;
+    // 查询范围列表（可一次查多段）
+    repeated HeadSyncRange ranges = 2;
+    // 差异算法版本
+    DiffType diffType = 3;
+}
+
+// HeadSyncResponse 是 HeadSync 的响应
+message HeadSyncResponse {
+    // 每个范围的结果
+    repeated HeadSyncResult results = 1;
+    // 差异算法版本
+    DiffType diffType = 2;
+}
+
+// ObjectSyncMessage 是对象同步时传输的消息
+message ObjectSyncMessage {
+    // 空间 ID
+    string spaceId = 1;
+    // 请求 ID（用于关联响应）
+    string requestId = 2;
+    // 回复 ID
+    string replyId = 3;
+    // 载荷：通常是序列化后的 treechange.TreeSyncMessage
+    bytes payload = 4;
+    // 对象 ID
+    string objectId = 5;
+    // 对象类型（树 / ACL / 键值）
+    ObjectType objectType = 6;
+}
+
+// SpacePushRequest 是向节点添加空间的请求（只带一条 ACL 记录）
+message SpacePushRequest {
+    // 空间载荷（头部 + ACL + 设置）
+    SpacePayload payload = 1;
+    // 凭证：coordinator 对空间头部的签名回执
+    bytes Credential = 2;
+}
+
+// SpacePushResponse 是空响应
+message SpacePushResponse {}
+
+// SpacePullRequest 是向没有该空间的节点拉取的请求
+message SpacePullRequest {
+    // 空间 ID
+    string id = 1;
+}
+
+// SpacePullResponse 包含空间头部与 ACL 记录
+message SpacePullResponse {
+    // 空间载荷
+    SpacePayload payload = 1;
+    // ACL 记录列表（最后一条即当前 ACL 头）
+    repeated AclRecord aclRecords = 2;
+}
+
+// AclRecord 是单条 ACL 记录
+message AclRecord {
+    // 记录载荷
+    bytes aclPayload = 1;
+    // 记录 ID（CID）
+    string id = 2;
+}
+
+// SpacePayload 是推送空间时的载荷
+message SpacePayload {
+    // 带 ID 的原始空间头部
+    RawSpaceHeaderWithId spaceHeader = 1;
+    // ACL 根记录载荷
+    bytes aclPayload = 2;
+    // ACL 根记录 ID
+    string aclPayloadId = 3;
+    // 空间设置树根的原始变更
+    bytes spaceSettingsPayload = 4;
+    // 空间设置树根的对象 ID
+    string spaceSettingsPayloadId = 5;
+}
+
+// 空间头部版本
+enum SpaceHeaderVersion {
+    // v0：旧格式，权限字段分散在 payload 中
+    SpaceHeaderVersion0 = 0;
+    // v1：ACL 与设置载荷内联到头部
+    SpaceHeaderVersion1 = 1;
+}
+
+// SpaceFileProtoVersion 决定空间使用的文件协议版本。
+// 它写在签名的不可变头部里，无法在不使所有者签名失效的情况下被剥离或降级。
+enum SpaceFileProtoVersion {
+    // 未指定
+    SpaceFileProtoVersionUnspecified = 0;
+    // v2：filenode v2 + S3 直连 + 网络签名
+    SpaceFileProtoVersionV2 = 2;
+}
+
+// SpaceHeader 是空间头部（空间的身份与元信息）
+message SpaceHeader {
+    // 空间创建者身份公钥
+    bytes identity = 1;
+    // 创建时间戳
+    int64 timestamp = 2;
+    // 空间类型（任意字符串，例如 anytype.space）
+    string spaceType = 3;
+    // 复制键：用于一致性哈希决定由哪些同步节点负责
+    uint64 replicationKey = 4;
+    // 随机种子（使空间 ID 唯一）
+    bytes seed = 5;
+    // 空间头附加载荷
+    bytes spaceHeaderPayload = 6;
+
+    // 以下为 v1 新增字段
+    // ACL 根记录载荷
+    bytes aclPayload = 7;
+    // 空间设置树根载荷
+    bytes settingPayload = 8;
+
+    // 文件协议版本（v2 = filenode v2 + S3 直连 + 网络签名）
+    SpaceFileProtoVersion fileprotoVersion = 9;
+
+    // 头部版本号
+    SpaceHeaderVersion version = 100;
+}
+
+// RawSpaceHeader 是未解析的空间头部及其签名
+message RawSpaceHeader {
+    // 序列化后的 SpaceHeader
+    bytes spaceHeader = 1;
+    // 所有者对 spaceHeader 的签名
+    bytes signature = 2;
+}
+
+// RawSpaceHeaderWithId 是带内容 ID 的原始空间头部
+message RawSpaceHeaderWithId {
+    // 序列化后的 RawSpaceHeader
+    bytes rawHeader = 1;
+    // 由 rawHeader 算出的 CID（即空间 ID）
+    string id = 2;
+}
+
+// SpaceSettingsContent 是空间设置对象可承载的操作
+message SpaceSettingsContent {
+    oneof value {
+        // 删除某个对象
+        ObjectDelete objectDelete = 1;
+        // 删除整个空间
+        SpaceDelete spaceDelete = 2;
+    }
+}
+
+// ObjectDelete 指明要删除的对象 ID
+message ObjectDelete {
+    // 被删除的对象 ID
+    string id = 1;
+}
+
+// StoreHeader 是存储的头部
+message StoreHeader {
+    // 空间 ID
+    string spaceId = 1;
+    // 存储名
+    string storageName = 2;
+}
+
+// SpaceDelete 指明删除空间的操作者
+message SpaceDelete {
+    // 删除者的 peer ID
+    string deleterPeerId = 1;
+}
+
+// SpaceSettingsSnapshot 汇总快照时刻所有被删除的对象 ID
+message SpaceSettingsSnapshot {
+    // 已删除对象 ID 列表
+    repeated string deletedIds = 1;
+    // 删除者 peer ID
+    string deleterPeerId = 2;
+}
+
+// SettingsData 包含对象树的变更载荷
+message SettingsData {
+    // 设置操作列表
+    repeated SpaceSettingsContent content = 1;
+    // 删除快照
+    SpaceSettingsSnapshot snapshot = 2;
+}
+
+// 空间订阅动作：放在 ObjectSyncMessage.Payload 中，表示当前流要订阅或退订某个空间
+enum SpaceSubscriptionAction {
+    // 订阅
+    Subscribe = 0;
+    // 退订
+    Unsubscribe = 1;
+}
+
+// SpaceSubscription 是空间订阅消息
+message SpaceSubscription {
+    // 要订阅/退订的空间 ID 列表
+    repeated string spaceIds = 1;
+    // 动作
+    SpaceSubscriptionAction action = 2;
+}
+
+// AclAddRecordRequest 包含序列化后的 consensusproto.RawRecord
+message AclAddRecordRequest {
+    // 空间 ID
+    string spaceId = 1;
+    // 记录载荷
+    bytes payload = 2;
+}
+
+// AclAddRecordResponse 返回新建记录 ID 与序列化后的记录
+message AclAddRecordResponse {
+    // 新建记录 ID
+    string recordId = 1;
+    // 记录载荷
+    bytes payload = 2;
+}
+
+// AclGetRecordsRequest 可带上已知的 ACL 头，服务端只返回其后新增的记录；
+// 不传则返回全部记录
+message AclGetRecordsRequest {
+    // 空间 ID
+    string spaceId = 1;
+    // 已知的 ACL 头记录 ID
+    string aclHead = 2;
+}
+
+// AclGetRecordsResponse 返回序列化后的 consensusproto.RawRecordWithId 列表
+message AclGetRecordsResponse {
+    repeated bytes records = 1;
+}
+
+// StoreDiffRequest 是存储差异请求
+message StoreDiffRequest {
+    // 空间 ID
+    string spaceId = 1;
+    // 查询范围
+    repeated HeadSyncRange ranges = 2;
+}
+
+// StoreDiffResponse 是存储差异响应
+message StoreDiffResponse {
+    repeated HeadSyncResult results = 1;
+}
+
+// StoreKeyValue 是键值存储中的一条记录
+message StoreKeyValue {
+    // 键所属的 peer ID
+    string keyPeerId = 1;
+    // 值
+    bytes value = 2;
+    // 身份签名
+    bytes identitySignature = 3;
+    // peer 签名
+    bytes peerSignature = 4;
+    // 空间 ID
+    string spaceId = 5;
+}
+
+// StoreKeyValues 是 StoreKeyValue 的批量形式
+message StoreKeyValues {
+    repeated StoreKeyValue keyValues = 1;
+}
+
+// StoreKeyInner 是键值存储的内部结构
+message StoreKeyInner {
+    // peer 公钥
+    bytes peer = 1;
+    // 身份公钥
+    bytes identity = 2;
+    // 值
+    bytes value = 3;
+    // 微秒时间戳
+    int64 timestampMicro = 4;
+    // ACL 头 ID
+    string aclHeadId = 5;
+    // 键名
+    string key = 6;
+}
+
+// StorageHeader 是存储的头部（与 StoreHeader 同构）
+message StorageHeader {
+    // 空间 ID
+    string spaceId = 1;
+    // 存储名
+    string storageName = 2;
+}
+
+// 差异算法版本
+enum DiffType {
+    // 初始版本
+    Initial = 0;
+    // V1（已废弃，不再支持）
+    V1 = 1;
+    // V2（已废弃，不再支持）
+    V2 = 2;
+    // V3（当前版本）
+    V3 = 3;
+}
+
+// 对象类型
+enum ObjectType {
+    // 树对象（普通数据对象，库/记录都属于此类）
+    Tree = 0;
+    // ACL 对象
+    Acl = 1;
+    // 键值对象
+    KeyValue = 2;
+}

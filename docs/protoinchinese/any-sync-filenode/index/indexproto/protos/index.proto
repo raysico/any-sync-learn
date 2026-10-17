@@ -1,0 +1,87 @@
+// ============================================================
+// 源文件：src/any-sync-filenode/index/indexproto/protos/index.proto
+// 所属仓库：any-sync-filenode ｜ proto 包：fileIndexProto
+// 说明：文件节点的索引结构（CID、分组、空间、文件、所有权）。
+// ============================================================
+
+syntax = "proto3";
+package fileIndexProto;
+
+option go_package = "index/indexproto";
+
+// CidEntry 是单个 CID 的索引项
+message CidEntry {
+    // 大小（字节）
+    uint64 size = 1;
+    // 创建时间
+    int64 createTime = 2;
+    // 更新时间
+    int64 updateTime = 3;
+    // 引用计数
+    int32 refs = 4;
+    // 版本号
+    uint32 version = 5;
+}
+
+// CidList 是 CID 列表
+message CidList {
+    repeated bytes cids = 1;
+}
+
+// GroupEntry 是分组（账户级文件池）索引项
+message GroupEntry {
+    // 分组 ID
+    string groupId = 1;
+    // 创建时间
+    int64 createTime = 2;
+    // 更新时间
+    int64 updateTime = 3;
+    // 已用大小
+    uint64 size = 4;
+    // CID 数量
+    uint64 cidCount = 5;
+    // 属于该分组的空间 ID
+    repeated string spaceIds = 6;
+    // 分组限额
+    uint64 limit = 7;
+    // 账户限额
+    uint64 accountLimit = 8;
+}
+
+// SpaceEntry 是空间级索引项
+message SpaceEntry {
+    // 所属分组 ID
+    string groupId = 1;
+    // 创建时间
+    int64 createTime = 2;
+    // 更新时间
+    int64 updateTime = 3;
+    // 已用大小
+    uint64 size = 4;
+    // 文件数量
+    uint32 fileCount = 5;
+    // CID 数量
+    uint64 cidCount = 6;
+    // 限额
+    uint64 limit = 7;
+}
+
+// FileEntry 是文件索引项
+message FileEntry {
+    // 组成该文件的 CID
+    repeated string cids = 1;
+    // 文件大小
+    uint64 size = 2;
+    // 创建时间
+    int64 createTime = 3;
+    // 更新时间
+    int64 updateTime = 4;
+}
+
+// OwnershipRecord 是所有权记录
+message OwnershipRecord {
+    // 所有者 ID
+    string ownerId = 1;
+    // 对应的 ACL 记录序号
+    int64 aclRecordIndex = 2;
+}

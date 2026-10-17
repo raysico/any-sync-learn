@@ -1,0 +1,121 @@
+// ============================================================
+// 源文件：src/any-sync/net/secureservice/handshake/handshakeproto/protos/handshake.proto
+// 所属仓库：any-sync ｜ proto 包：anyHandshake
+// 说明：安全握手协议。先做 TLS 握手拿到双方 peer ID，再交换凭证并互相确认；
+//       成功后再协商上层协议（DRPC）与编码。
+// ============================================================
+
+syntax = "proto3";
+package anyHandshake;
+
+option go_package = "net/secureservice/handshake/handshakeproto";
+
+/*
+凭证握手流程
+
+Alice 与 Bob 建立新连接：
+1. TLS 握手完成；双方已知本地与对端 peer 标识。
+2. Alice 向 Bob 发送 Credentials 消息。
+3. Bob 收到后校验 Alice 的凭证：
+   3.1 凭证有效 → Bob 把自己的凭证发给 Alice；
+   3.2 凭证无效 → Bob 发送带错误的 Ack 并关闭连接。
+4. Alice 收到 Bob 的消息：
+   4.1 若是 Credentials → Alice 校验；
+       4.1.1 有效 → 回复 Ack(error=Null)；
+       4.1.2 无效 → 回复带错误的 Ack 并关闭连接；
+   4.2 若是 Ack → Alice 得知握手失败的原因。
+5. Bob 收到 Alice 的 Ack：
+   5.1 error == Null → Bob 回复 Ack(error=Null)，握手成功；
+   5.2 error != Null → Bob 得知握手失败的原因。
+
+成功握手时序：
+    Alice -> [CREDENTIALS] -> Bob
+    Bob   -> [CREDENTIALS] -> Alice
+    Alice -> [Ack:Error=Null] -> Bob
+    Bob   -> [Ack:Error=Null] -> Alice
+ */
+
+// Credentials 是凭证消息
+message Credentials {
+    // 凭证类型
+    CredentialsType type = 1;
+    // 凭证载荷（类型决定其结构）
+    bytes payload = 2;
+    // 协议版本
+    uint32 version = 3;
+    // 客户端版本字符串（便于排障）
+    string clientVersion = 4;
+}
+
+// 凭证类型
+enum CredentialsType {
+    // 跳过验证：不需要身份的场景（例如纯 p2p）
+    SkipVerify = 0;
+    // 使用签名 peer ID：载荷为 PayloadSignedPeerIds
+    SignedPeerIds = 1;
+}
+
+
+// PayloadSignedPeerIds 是签名 peer ID 的载荷
+message PayloadSignedPeerIds {
+    // 账户身份公钥
+    bytes identity = 1;
+    // 对 (localPeerId + remotePeerId) 的签名
+    bytes sign = 2;
+}
+
+
+// Ack 是确认消息
+message Ack {
+    Error error = 1;
+}
+
+
+// 握手错误码
+enum Error {
+    // 成功
+    Null = 0;
+    // 未知错误
+    Unexpected = 1;
+    // 凭证无效
+    InvalidCredentials = 2;
+    // 载荷类型不符
+    UnexpectedPayload = 3;
+    // 不允许跳过验证
+    SkipVerifyNotAllowed = 4;
+    // 超时
+    DeadlineExceeded = 5;
+    // 版本不兼容
+    IncompatibleVersion = 6;
+    // 上层协议不兼容
+    IncompatibleProto = 7;
+}
+
+
+/*
+上层协议协商
+
+完成后双方协商使用哪种 RPC 协议与编码。
+ */
+
+// Proto 是协议协商消息
+message Proto {
+    // RPC 协议类型
+    ProtoType proto = 1;
+    // 支持的编码列表
+    repeated Encoding encodings = 2;
+}
+
+// RPC 协议类型
+enum ProtoType {
+    // DRPC（any-sync 唯一的 RPC 协议，非标准 gRPC）
+    DRPC = 0;
+}
+
+// 编码方式
+enum Encoding {
+    // 不压缩
+    None = 0;
+    // Snappy 压缩
+    Snappy = 1;
+}
