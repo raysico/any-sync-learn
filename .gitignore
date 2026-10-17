@@ -11,3 +11,7 @@ src/
 
 # 运行中的 any-sync 网络（含私有配置与数据，绝不入库）
 compose/
+
+# macOS
+.DS_Store
+**/.DS_Store

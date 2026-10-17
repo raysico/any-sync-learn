@@ -1,8 +1,12 @@
 {
   "name": "any-sync-learn",
-  "version": "0.0.0",
-  "description": "",
+  "version": "0.1.0",
+  "milestone": "Milestones0.1.0",
+  "description": "从源码构建自有 any-sync 网络的研习项目，含 userDomain Web 客户端",
   "main": "index.js",
-  "scripts": {},
-  "author": ""
+  "scripts": {
+    "localnet:start": "bash scripts/localnet-start.sh",
+    "localnet:stop": "bash scripts/localnet-stop.sh"
+  },
+  "author": "hoxiudimdim"
 }
