@@ -427,5 +427,6 @@ ObjectSyncStream（常驻）
 | 两个客户端 networkId 不一致 | 用了本地配置 ID 而非协调节点返回的 `networkId` |
 | 空间 60 秒后被关闭 | `space.gcTTL` 正常回收，不是错误 |
 | 只推一个节点时另外两个返回 `tree not found` | 写入需遍历全部负责节点 |
+| 订阅几秒后断流、节点日志 `peer close` / `stream removed` | 同一设备密钥（peerId）存在多条连接，被节点挤掉；每进程/每用途用独立 device key（见 9.11） |
 | 自举结果与本地列表对不上 | 助记词账户与用户域所有者不一致（见 9.5） |
 | 往已有树追加变更后 heads 不变 | 推送时 `objectId` 用了变更 ID，必须用树 ID（见 9.3） |
