@@ -371,6 +371,22 @@ go build -ldflags "-X main.buildCommit=$(git -C ../../.. rev-parse --short HEAD)
 
 页脚通过接口异步填充，加载失败时降级为 `power by hoxiudimdim anythinks`。
 
+### 9.10 副本同步与缓存（本轮修正）
+
+**问题**：OTHER 副本（:8788）页面显示旧内容 / 未及时更新。
+
+**两个根因**：
+
+| 根因 | 修复 |
+| --- | --- |
+| 浏览器缓存了旧 `index.html` | 静态与接口统一加 `Cache-Control: no-store, no-cache, must-revalidate`（`noCache` 包装） |
+| 副本没有主动同步 | 副本实例启动后台任务，每 **20 秒** 从网络 `pullAndSave` 一次 |
+
+**前端**：页面加载后每 **5 秒** 重读一次 `/api/libraries`，内容变化即重绘（不打扰正在输入的表单）。
+
+**注意**：本机主/副本共用同一个 `data/libraries.jsonl`，所以本地记录天然一致；
+副本后台拉取的意义在于把**网络上其他设备的更新**带进本地，界面轮询再把变化呈现出来。
+
 ## 10. 排障时最容易踩的坑
 
 | 现象 | 真实原因 |
