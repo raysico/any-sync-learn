@@ -277,6 +277,17 @@ grep -qE 'netcheck\s+success' /tmp/netcheck-last.log
 
 > 删除只影响本机历史文件，不影响该账户在网络上已有的任何数据。
 
+#### POST /api/userdomains/clear?confirm=1 —— 清空全部历史
+
+| 项 | 内容 |
+| --- | --- |
+| 请求参数 | `confirm=1`（query，必填，防误触） |
+| 行为 | 用空列表覆盖历史文件（等同删除全部记录，含助记词，不可恢复） |
+| 响应 | `{"deleted": <被清空条数>}` |
+| 错误 | 400（缺 `confirm=1`：`{"error":"缺少 confirm=1，拒绝清空"}`）；500（写入失败） |
+
+> 清空只影响本机历史文件，不影响任何账户在网络上已有的数据。
+
 ### 7.4 userDomain 对象
 
 | 字段 | 类型 | 说明 |
