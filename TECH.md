@@ -347,6 +347,30 @@ BuilderContent{
 登录时先按账户查这份登记，命中则把 `domain.json` 切到该域再拉取，避免“用新域助记词却拉到旧域数据”。
 服务启动时会把已有的 `domain.json` 补登记进 `domains.json`。
 
+### 9.9 版本页脚
+
+页面最下方固定一条 **40px 高、内容居中** 的页脚：
+
+```
+power by hoxiudimdim anythinks V{version} @ dev：{commit}
+```
+
+| 字段 | 来源 |
+| --- | --- |
+| version | 仓库根 `package.json` 的 `version`（运行期读取，向上最多找 6 层目录） |
+| commit | 构建时注入：`-X main.buildCommit=<短哈希>`，未注入时为 `unknown` |
+| 分支 | 固定 `dev` |
+
+接口：`GET /api/version` → `{version, commit, branch}`。
+
+推荐构建命令（在工具目录执行）：
+
+```bash
+go build -ldflags "-X main.buildCommit=$(git -C ../../.. rev-parse --short HEAD)"   -o bin/userdomain-web .
+```
+
+页脚通过接口异步填充，加载失败时降级为 `power by hoxiudimdim anythinks`。
+
 ## 10. 排障时最容易踩的坑
 
 | 现象 | 真实原因 |
