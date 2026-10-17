@@ -1,358 +1,214 @@
 # TECH.md
 
-> 本项目技术文档：架构、模块设计、数据流、约束、选型决策、数据模型、接口设计。
-> 版本号真源：`package.json`（当前 0.0.0）
+> 本文件只记录**已在本地网络实测跑通**的做法，以及可直接复用的外部资料索引。
+> 历史环境搭建与迁移细节见归档 [TECH-ARCHI.md](TECH-ARCHI.md)。
 
 ---
 
-## 1. 环境基线（2026-10-17 建立）
+## 1. 项目边界
 
-### 1.1 本机环境
-
-| 项 | 值 |
+| 项 | 结论 |
 | --- | --- |
-| 架构 | arm64 (Apple Silicon) |
-| Go | 1.27.1 darwin/arm64，安装于 `~/.local/go` |
-| Node | v24.4.1 |
-| Docker | Docker Desktop 4.61.0，compose v5.0.2 |
-| Xcode / clang | `/Applications/Xcode.app`，Apple clang 17.0.0（CGO 依赖） |
-| brew | 7.0.9 |
+| 目标 | 自研 userDomain Web 客户端：用 any-sync 网络承载「用户域 → 库 / 记录」 |
+| 禁止 | **不使用 anytype-heart**（非 MIT 协议，且数据模型与本项目不一致），只可读其源码作参考 |
+| 网络职责 | 只负责 SpacePush 与 HeadSync（对象同步）；对象语义全部由应用定义 |
+| 身份 | BIP-39 12 词 → `m/44'/2046'/i'` 派生账户密钥 |
+| 协议 | DRPC（**不是 gRPC**），编码在握手阶段协商（None / Snappy） |
 
-**Go 环境变量**（已写入 `~/.zshrc` 与 `~/.zprofile`，登录/交互式 shell 均生效）：
+---
+
+## 2. 术语与对象模型
 
 ```
-PATH        += $HOME/.local/go/bin
-GOPATH      =  $HOME/go
-GOPROXY     =  https://goproxy.cn,direct
-GOPRIVATE   =  github.com/anyproto
+用户域（Space，一个空间 ID）
+ ├─ 库对象     根变更 changeType=library
+ ├─ 记录对象   根变更 changeType=entry，载荷内 lib=<库对象 ID>
+ └─ 记录对象   …
 ```
-
-> ⚠️ 非登录非交互 shell（如部分脚本 `zsh -c`）不读 `.zshrc`/`.zprofile`。写构建脚本时请显式加 `export PATH="$HOME/.local/go/bin:$PATH"`。
-
-### 1.2 目录布局
-
-| 路径 | 用途 | 是否入库 |
-| --- | --- | --- |
-| `src/` | 14 个官方仓库的 **git 克隆**（各自独立仓库） | 否（`.gitignore`） |
-| `compose/any-sync-dockercompose/` | **运行中的** any-sync 网络（含 `etc/` 私有配置与 `storage/` 数据） | 否（`.gitignore`） |
-| `docs/` | 学习计划与产出文档 | 是 |
-| `docs/imported/` | 从旧 `any-sync-ecosystem` 抢救的自制调研资产 | 是 |
-| `scripts/` | 工具脚本 | 是 |
-| `playground/` | 临时实验 | 否（`.gitignore`） |
-
----
-
-## 2. 源码版本基线
-
-**决策：锁定 0.13.x 系列**，与本地运行中的镜像严格对齐。理由：这是「改一行代码 → 观察行为变化」因果链最短的配置；升级会引入无关变量，干扰能力边界判断。
-
-### 2.1 网络组件（构建目标）
-
-| 仓库 | Tag | Commit |
-| --- | --- | --- |
-| any-sync | v0.13.1 | `f71a247` |
-| any-sync-node | v0.13.1 | `7426c31` |
-| any-sync-coordinator | v0.13.0 | `d65eec4` |
-| any-sync-consensusnode | v0.13.0 | `0333ed5` |
-| any-sync-filenode | v0.13.0 | `e196aeb` |
-| any-sync-tools | v0.7.0 | `e5d018a` |
-
-**关键约束：节点版本 ≠ 它依赖的 any-sync 库版本。**
-
-实测四个节点的 `go.mod` **全部依赖 `any-sync v0.13.1`**：
-
-| 节点 | 运行版本 | 依赖的 any-sync 库 |
-| --- | --- | --- |
-| any-sync-node | v0.13.1 | v0.13.1 |
-| any-sync-coordinator | v0.13.0 | v0.13.1 |
-| any-sync-consensusnode | v0.13.0 | v0.13.1 |
-| any-sync-filenode | v0.13.0 | v0.13.1 |
-
-> 因此 `src/any-sync` 必须 checkout **v0.13.1**，不能取最新 tag v0.13.8，否则库层与镜像不匹配。
-
-### 2.2 其余克隆仓库
-
-| 仓库 | Tag/分支 | Commit |
-| --- | --- | --- |
-| any-sync-dockercompose | v8.0.1 | `8035d68` |
-| any-sync-admin | v0.0.7 | `2344b3f` |
-| any-ns | v1.0.0 | `77cc311` |
-| any-ns-node | v0.7.2 | `3d1c531` |
-| any-block | main（v2.0.0-rc6+1） | `cd807bb` |
-| anytype-heart | main（v0.51.6） | `d98420b` |
-| ansible-anysync | v1.1 | `cf65932` |
-| puppet-anysync | v3.4.5 | `5bf1108` |
-
-### 2.3 Go 版本要求（各仓库 `go.mod` 实测）
-
-| 仓库 | 要求 |
-| --- | --- |
-| any-sync v0.13.1 | go 1.25.7 |
-| any-sync-node / coordinator / consensusnode / tools | go 1.25.7 |
-| any-sync-filenode | go 1.26.4 |
-| any-sync-node（README 口径） | go 1.26（与 go.mod 不一致，以 go.mod 为准） |
-
-本机 Go 1.27.1 满足全部要求。
-
----
-
-## 3. 运行中的网络
-
-### 3.1 拓扑
-
-| 服务 | 镜像 | 宿主端口 |
-| --- | --- | --- |
-| coordinator | `ghcr.io/anyproto/any-sync-coordinator:v0.13.0` | 1004/tcp, 1014/udp |
-| consensusnode | `ghcr.io/anyproto/any-sync-consensusnode:v0.13.0` | 1006/tcp, 1016/udp |
-| any-sync-node-1/2/3 | `ghcr.io/anyproto/any-sync-node:v0.13.1` | 1001-1003/tcp, 1011-1013/udp |
-| filenode | `ghcr.io/anyproto/any-sync-filenode:v0.13.0` | 1005/tcp, 1015/udp |
-| netcheck | `ghcr.io/anyproto/any-sync-tools:latest` | —— |
-| mongo-1 | `mongo:7.0.28`（replica set `rs0`） | 127.0.0.1:27001 |
-| redis | `redis/redis-stack-server:7.2.0-v6`（Bloom 模块） | 127.0.0.1:6379 |
-| minio | `quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z` | 9000/9001（容器内） |
-
-各节点另暴露 8000/8080 等内部端口（绑定 127.0.0.1:8001-8006、8081-8083）。
-
-### 3.2 重要约束与已知状态
-
-- **对象存储是 MinIO，不是 Garage**。官方 v8.0.0 起已迁至 Garage；本项目沿用旧栈（MinIO 官方镜像已停更）。迁移与否待决策。
-- 桶名 `minio-bucket`（当前 compose 栈），不是 v8 的 `any-sync-files`。
-- Redis **必须**带 Bloom 模块：启动参数 `--loadmodule /opt/redis-stack/lib/redisbloom.so`，否则 filenode 起不来。
-- 网络配置：`compose/any-sync-dockercompose/etc/`，客户端接入用 `etc/client.yml`（本机）/ `etc/client-lan.yml`（局域网 `192.168.3.191`）。
-- 数据目录 `storage/` 约 551MB（mongo 423MB / minio 60MB / redis 49MB / anyStorage 26MB）。
-
-### 3.3 健康判据
-
-唯一权威判据是 netcheck。注意两点：日志里 `netcheck` 与 `success` 之间是**制表符**而非空格；容器健康检查读的是容器内 `/tmp/netcheck-last.log`。
-
-```bash
-# 方式一：直接看健康状态（最省事，官方 compose 的 healthcheck 就是判它）
-docker inspect any-sync-dockercompose-netcheck-1 --format '{{.State.Health.Status}} {{.State.Health.FailingStreak}}'
-# 预期输出：healthy 0
-
-# 方式二：统计日志中的成功次数（用 [[:space:]] 兼容制表符）
-docker logs any-sync-dockercompose-netcheck-1 2>&1 | grep -cE "netcheck[[:space:]]+success"
-```
-
-所有服务 `Up` 且 netcheck 为 `healthy`（`FailingStreak: 0`）即健康。compose 内置的健康检查命令为：
-
-```
-grep -qE 'netcheck\s+success' /tmp/netcheck-last.log
-```
-
----
-
-## 4. 迁移记录（2026-10-17）
-
-原 `whynownote/any-sync-ecosystem`（621MB，tarball 解压副本，无 git 历史）已拆除，内容去向：
-
-| 原内容 | 去向 |
-| --- | --- |
-| 14 个仓库源码 | `src/`，改为 **git clone**（可切 tag、可 diff、可打补丁） |
-| `docs/`（42 个自制文件，含 387KB protobuf 接口参考、4 个 HTML 可视化、2 个生成工具） | `docs/imported/`，已 md5 逐项校验 |
-| `any-sync-dockercompose/`（含 `etc/` 私有配置 + `storage/` 数据） | `compose/any-sync-dockercompose/`，数据文件数逐目录校验一致 |
-| `fetch_all.sh`、`restart-local-cluster.sh` | `scripts/` |
-
-**客户端适配**：`whynownote-heart/go.mod` 的 `replace github.com/anyproto/any-sync` 已从旧路径改指向 `src/any-sync`；迁移后 `go build` 验证通过（9 秒，30MB 产物）。
-
----
-
-## 5. 待决策项
-
-| # | 待定 | 影响 |
-| --- | --- | --- |
-| 1 | 继续用 MinIO 旧栈，还是迁移到 v8 + Garage | 旧栈稳定但停止演进；迁移需改配置与数据 |
-| 2 | `docs/imported/` 是否纳入版本控制 | 目前设计为入库（已从 `.gitignore` 排除），需确认无敏感路径 |
-| 3 | `src/` 是否需要 vendor 化以长期锁定 | 当前靠 tag + commit 锁定，上游删除 tag 即失效 |
-
----
-
-## 6. 架构与接口资料索引
-
-| 资料 | 位置 |
-| --- | --- |
-| 协议 Protobuf 全量参考（28 proto / 17 service / **112 RPC** / 727 message / 133 enum） | `docs/imported/any-sync-protobuf-接口参考.md` |
-| 密钥派生可视化 | `docs/imported/any-sync-vault-key-derivation.html` |
-| 两层哈希可视化 | `docs/imported/any-sync-two-layer-hashing.html` |
-| ReadKey 轮换可视化 | `docs/imported/any-sync-read-key-rotation.html` |
-| 节点拓扑可视化 | `docs/imported/any-sync-node-topology.html` |
-| proto 解析/文档生成工具 | `docs/imported/tools/` |
-| 技术文档中文导入（Feishu） | `docs/imported/.feishu_import/` |
-
----
-
-## 7. userDomain Web 客户端（用户域登录与历史）
-
-> 实现位置：`test/tools/userdomain-web/`（本地调试工具，按约定留在 `test/`，不入库）
-> 启动：`./bin/userdomain-web -addr 0.0.0.0:8787 -network <nodes.yml> [-store data/userdomains.jsonl]`
-
-### 7.1 术语与边界
-
-| 术语 | 定义 | 对标 Anytype |
-| --- | --- | --- |
-| **用户域（userDomain）** | 由助记词在本机离线派生出的一组密钥身份；是「登录」与权限的主体 | 账户 / Vault |
-| **库（library）** | 用户在用户域下自己管理、可列出的资源单元（本轮不实现） | Channel / Space |
-| **登录** | 与网络完成握手，证明密钥被该网络受理 | 客户端连接 any-sync 网络 |
-| **网络配置** | `nodes.yml`/`client.yml`，决定连哪个网络；**不参与密钥派生** | Subnet Configuration |
-
-### 7.2 密钥边界
-
-- 助记词（12 词）用 `crypto/rand` 在本机生成，**不参与任何上传**；网络只收到签名。
-- 派生：`m/44'/2046'/<index>'`（master）、`m/44'/2046'/<index>'/0'`（signing/身份）、`m/44'/60'/0'/0/<index>`（Ethereum）。
-- 助记词是唯一真源：同一助记词 + 同一 index → 同一账户 ID；导入记录时一律按助记词重新派生账户 ID，忽略文件中的 `accountId`。
-- 历史记录保存于本机 JSON Lines 文件（默认 `data/userdomains.jsonl`，权限 0600），内含助记词，属于敏感文件。
-
-### 7.3 接口清单
-
-统一前缀：`http://<host>:8787`；请求与响应均为 `application/json; charset=utf-8`；错误统一为 `{"error": "<中文说明>"}`。
-
-#### GET /api/network —— 读取当前网络配置
-
-请求参数：无。响应字段：
-
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| path | string | 网络配置文件绝对路径 |
-| networkId | string | 网络 ID；`nodes.yml` 中为空时回退为配置 id |
-| configurationId | string | 配置 ID（anyconf 的 `id`） |
-| loadedAt | string(RFC3339) | 本次读取时间 |
-| coordinator | string | coordinator 的 TCP 地址（首个非 `quic://` 地址） |
-| nodes[].peerId | string | 节点 peerId |
-| nodes[].types | string[] | `tree` / `coordinator` / `file` / `consensus` |
-| nodes[].addresses | string[] | 地址列表 |
-
-错误：500（配置文件不可读 / YAML 非法 / 无任何节点）。
-
-#### POST /api/userdomain —— 生成用户域并登录
-
-| 项 | 内容 |
-| --- | --- |
-| 请求体 | `{"index": 0}`（可选，省略按 0 处理） |
-| 行为 | 本机生成 12 词助记词 → 派生密钥 → 与 coordinator 握手 → 写入历史记录 |
-| 响应 | userDomain 对象（见 7.4） |
-| 错误 | 500（生成助记词失败 / 网络配置不可读） |
-
-#### POST /api/login —— 用已有助记词登录
-
-| 项 | 内容 |
-| --- | --- |
-| 请求体 | `{"mnemonic": "<12 词>", "index": 0}` |
-| 行为 | 校验助记词 → 派生同一用户域 → 与 coordinator 握手 → 以账户 ID 合并写入历史 |
-| 响应 | userDomain 对象（见 7.4） |
-| 错误 | 400（请求体非合法 JSON / 助记词词数、拼写或校验和不对）；500（网络配置不可读） |
-
-> 握手失败**不是** HTTP 错误：返回 200，结果体现在 `login.ok=false` 与 `login.error`，便于前端展示「已生成、但连不上」。
-
-#### GET /api/userdomains —— 历史列表
-
-请求参数：无。响应：userDomain 对象数组，按 `createdAt` 倒序。错误：500（历史文件不可读）。
-
-#### GET /api/userdomains/export —— 导出全部历史
-
-| 项 | 内容 |
-| --- | --- |
-| 请求参数 | 无 |
-| 响应头 | `Content-Type: application/json`；`Content-Disposition: attachment; filename="userdomain-export-YYYYMMDD-HHMMSS.json"` |
-| 响应体 | userDomain 对象数组 |
-| 错误 | 500 |
-
-> 前端用 `fetch + Blob + <a download>` 触发下载，不依赖顶层导航。
-
-#### POST /api/userdomains/import —— 导入历史
-
-| 项 | 内容 |
-| --- | --- |
-| 请求体 | userDomain 对象**或**对象数组；上限 4 MB |
-| 行为 | 有助记词的记录按助记词重新派生 `accountId`，`id` 一律等于 `accountId`；同 id 覆盖、否则新增；助记词非法或缺字段的记录跳过 |
-| 响应 | `{"imported": <新增或覆盖条数>, "skipped": <跳过条数>}` |
-| 错误 | 400（请求体既不是合法数组也不是合法对象） |
-
-#### POST /api/userdomains/delete?id=<accountId> —— 删除历史记录
-
-| 项 | 内容 |
-| --- | --- |
-| 请求参数 | `id`（query，必填，账户 ID） |
-| 响应 | `{"deleted": "<accountId>"}` |
-| 错误 | 400（缺 id）；500（写入失败） |
-
-> 删除只影响本机历史文件，不影响该账户在网络上已有的任何数据。
-
-### 7.4 userDomain 对象
-
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| id | string | 用户域标识，等于 `accountId` |
-| mnemonic | string | 12 词助记词 |
-| accountId | string | 身份公钥账户 ID（`m/44'/2046'/i'/0'`） |
-| devicePeerId | string | 设备 peerId |
-| ethereumAddress | string | Ethereum 地址（ANS 用） |
-| derivation | string | 派生路径说明 |
-| networkId | string | 登录时所用网络的 ID |
-| networkPath | string | 网络配置文件路径 |
-| createdAt | string(RFC3339) | 生成时间 |
-| serverHost | string | 生成时的请求 Host |
-| keys.masterKeyBase64 | string | master key（protobuf 编码后 base64） |
-| keys.deviceKeyBase64 | string | device key |
-| keys.signingKeyBase64 | string | signing key |
-| keys.ethereumPrivateKeyHex | string | Ethereum 私钥 hex（**极高敏感**） |
-| login.ok | bool | 是否握手成功 |
-| login.addr | string | 握手目标地址 |
-| login.durationMs | int | 握手耗时 |
-| login.error | string | 失败原因（成功时省略） |
-| login.notes | string | 说明（含局域网补全地址信息） |
-
-### 7.5 登录判据
-
-- 握手链路：TCP → libp2p TLS 安全握手（`secureservice`）→ DRPC 协议握手（`handshakeproto.ProtoType_DRPC`）。
-- 目标：网络配置中的 coordinator；`login.ok=true` 表示该密钥被网络受理。
-- 局域网访问：服务监听 `0.0.0.0` 时，在**内存中**给每个节点追加本机私有网段地址（`10/8`、`172.16/12`、`192.168/16`），不改配置文件。
-
-### 7.6 后续待定
-
-| # | 待定 | 说明 |
-| --- | --- | --- |
-| 1 | 用户域 ⇄ 个人空间 ID 的确定性推导 | 官方用 v0 头部构造器 + 密钥推导；本客户端暂不创建空间，只认证身份 |
-| 2 | 库（library）与 `listLibrary` | 对标 Anytype Channel，下一轮实现 |
-| 3 | 历史记录是否服务端加密 | 当前为明文 JSONL，仅靠文件权限保护 |
-
-## 8. 用户域对象模型与对象同步通道（20261017 20:05-01 已实施）
-
-本节记录**实测确认**的写入/读取链路，供后续实现与排障复核。所有结论均来自本地 6 进程网络（coordinator 2004 / consensus 2006 / filenode 2005 / node-1~3 2001–2003）的日志与数据库取证。
-
-### 8.1 对象模型（用户域 = Space）
 
 | 概念 | 落地方式 |
 | --- | --- |
-| 用户域 | any-sync 的 Space，一个空间 ID |
-| 库（library） | 空间内一棵独立对象树，根变更 `changeType=library` |
-| 记录（entry） | 空间内另一棵独立对象树，根变更 `changeType=entry`，载荷内 `lib=<库对象 ID>` |
-| 归属关系 | 由记录对象载荷里的 `lib` 属性表达，**网络不解释**，空间里没有“对象清单”字段 |
-| 加密 | 根变更的 `ChangePayload` 用空间 ReadKey（AES）加密后再写入 |
+| 对象 | 空间内一棵独立的树：`根（RootChange）+ 变更链`，对象 ID = 根变更的 CID |
+| 库与记录的关系 | **平级**。归属只由记录载荷里的 `lib` 字段表达 |
+| 对象清单 | **空间里没有对象清单**。`SpaceSettingsContent` 只有 `ObjectDelete` / `SpaceDelete`，不登记新增对象 |
+| 加密 | 根变更的 `ChangePayload` 用空间 ReadKey（AES）加密后写入，节点只见密文 |
+| ACL | 每个变更都引用创建时刻的 ACL 头；权限由 ACL 记录链定义 |
 
-对象 ID = 根变更的 CID。库与记录在空间内**平级**，不存在“记录挂在库下面”的树结构。
+---
 
-### 8.2 写入通道（关键：节点会反向开流）
+## 3. 已跑通的四条链路
 
-新对象入网需要四步，缺一不可：
+### 3.1 取网络配置（不要自算节点）
 
-1. **协调节点取配置**：`NetworkConfiguration` 拿到 networkId 与节点清单（不要用本地 nodes.yml 自算）；
-2. **建空间**（仅首次）：`SpaceSign` 取回执 → `SpacePush` 到全部负责节点；
-3. **推对象**：在 `ObjectSyncStream`（双向长连接）上发送 `headUpdate`，携带对象根；
-4. **接受节点回拉**：节点发现本地没有该对象，会**在同一条 yamux 连接上反向开流**，调用 `ObjectSyncRequestStream` 索要数据；客户端必须在该连接上 `MultiConn.Accept()` 接受流、完成 DRPC 协议握手、以 SpaceSync 服务端应答 `FullSyncResponse`（含 `RootChange` 与 `Heads`）。
+客户端向**协调节点**要配置，而不是读本地 `nodes.yml` 自己算：
 
-**易错点**：只做“出站推送”而不接受反向流，节点会反复记录 `tree does not exist`，对象永远不落盘。
+```
+Coordinator.NetworkConfiguration(空请求)
+  → configurationId、networkId、nodes[]（peerId + addresses + types）
+```
 
-### 8.3 读取通道
+实测返回：networkId `N97tZ7HUEZdxoC2JUzFHmuQphYetQbJnjTY3VcAcy6dRmzc5`，6 个节点（3 tree / 1 coordinator / 1 file / 1 consensus）。
 
-- **不要用 `HeadSync` 判成败**：它是差异同步语义，新建对象不会出现在其结果里，即使对象已经落盘。
-- 正确做法：**按对象 ID 拉根**——`ObjectSyncRequestStream` 发 `FullSyncRequest{Probe:true}`，取回 `RootChange`，用 ReadKey 解密 `ChangePayload`。
-- 各节点独立持有：未推送到的节点会返回 `tree not found`，因此写入要遍历全部负责节点。
+### 3.2 建用户域（仅首次）
 
-### 8.4 已完成的验证
+```
+spacepayloads.StoragePayloadForSpaceCreate(...)         // 生成头部 + ACL 根
+objecttree.BuildRoot(settings 根, changeType=any-sync.space)
+Coordinator.SpaceSign(spaceId, rawHeader)               // 取回执
+Spacesync.SpacePush(                                    // 推给每个负责节点
+  SpacePayload{SpaceHeader, AclPayload+AclPayloadId,
+               SpaceSettingsPayload+Id},
+  Credential=serialized(receipt))
+```
+
+判据：`SpaceStatusCheck` 返回 `SpaceStatusCreated` + `SpacePermissionsOwner`；`SpacePull` 能取回 settings 与 ACL 记录。
+
+### 3.3 写对象（关键：节点会反向开流）
+
+```
+ObjectSyncStream(双向流)
+  ① 先发 SpaceSubscription{SpaceIds, Subscribe}
+  ② 再发 headUpdate{Heads:[对象ID], Changes:[根变更], RootChange:根}
+  ③ 节点发现本地没有该对象 → 在【同一条 yamux 连接上反向开流】
+  ④ 客户端必须在已拨出的连接上 MultiConn.Accept()
+     → handshake.IncomingProtoHandshake
+     → drpcserver.ServeOne(conn)
+     → 以 SpaceSync 服务端响应 ObjectSyncRequestStream
+  ⑤ 回传 TreeFullSyncResponse{Heads:[对象ID], Changes:[根]}
+```
+
+**必须接受反向流**，否则节点侧只会反复出现 `tree does not exist`，对象永不落盘。
+
+### 3.4 读对象（按 ID 拉根）
+
+```
+ObjectSyncRequestStream(TreeSyncMessage{
+    FullSyncRequest{Probe:true}}, spaceId, objectId)
+  → 取回 RootChange
+  → sk.Decrypt(rootChange.ChangePayload)
+```
+
+**不要用 `HeadSync` 判定写入成败**：它是差异同步语义，新建对象即使已落盘也不会出现在其结果里。
+
+---
+
+## 4. 实测数据与判据
 
 | 项 | 结果 |
 | --- | --- |
-| 用户域创建（含 SpaceSign/SpacePush） | 3/3 负责节点成功 |
-| 库对象写入 | 3/3 节点接受，按 ID 可原样回读（`changeType=library`，载荷为密文） |
-| 2 库 + 4 记录 | 主实例（:8787）与副本实例（:8788）均可从网络读回，`lib` 属性正确归属 |
-| 节点持久化 | 空间 `store.db` 的 `_heads_docs` 含新对象条目；重启后仍可回读 |
+| 用户域创建 | 3/3 负责节点 `SpacePush` 成功 |
+| 库对象写入 | 3/3 节点接受；按 ID 回读 `changeType=library`，载荷为密文 |
+| 2 库 + 4 记录 | 主实例 `:8787` 与副本 `:8788` 均从网络读回，`lib` 归属正确 |
+| 节点持久化 | `anyStorage/<spaceId>/store.db` 的 `_heads_docs` / `_changes_docs` 含新对象；重启后可回读 |
+
+**判定方式**（唯一可信）：
+
+1. 按对象 ID 调 `ObjectSyncRequestStream(Probe:true)` 能取回根；
+2. 解密后的 `changeType` 与载荷内容与写入时一致；
+3. 直接查节点 SQLite：`sqlite3 store.db "select * from _heads_docs;"` 能看到该对象 ID。
+
+---
+
+## 5. 本地网络基线
+
+| 组件 | 地址 | 说明 |
+| --- | --- | --- |
+| coordinator | 127.0.0.1:2004 | 配置下发、SpaceSign、空间状态 |
+| consensus | 127.0.0.1:2006 | ACL 校验 |
+| filenode | 127.0.0.1:2005 | 文件 |
+| node-1/2/3 | 2001 / 2002 / 2003 | 同步节点（tree API），quic 3001–3006 |
+| mongo / redis / minio | 27001 / 6379 / 9000 | Docker |
+
+- 配置：`playground/local-net/nodes.yml`、`etc/any-sync-node-{1,2,3}.yml`
+- 数据：`playground/local-net/data/node-{1,2,3}/anyStorage/<spaceId>/store.db`
+- 节点空间缓存 TTL：`space.gcTTL: 60`（60 秒不活跃即卸载，属正常行为）
+
+---
+
+## 6. 错误码与协议约定
+
+wire 码 = 区间基准 + 本地码；两组撞码会导致进程启动 panic。
+
+| 区间 | 服务 |
+| --- | --- |
+| 1 / 2 | `Unexpected` / `Closed`（全局保留） |
+| 100–199 | spacesync |
+| 200–299 | filesync v1 |
+| 300–399 | coordinator |
+| 400–499 | treechange（`tree not found` 属此段） |
+| 500–599 | consensus |
+| 600–699 | payment |
+| 700–799 | limiter |
+| 800–899 | filesync v2 |
+| 900–999 | filesync p2p |
+| 1000–1099 | nodesync |
+| 1100–1199 | pubsub |
+
+其他约定：
+
+- **pubsub 是独立服务与独立 DRPC 长连接**，四种帧 `Subscribe/Unsubscribe/Publish/Status`；禁止复用 `ObjectSyncStream`；payload 用 ReadKey 加密 + 账户密钥签名，节点只转发密文。
+- `changeType` 是**任意字符串**，网络不解释。
+- 空间头部当前为 **v0**：ACL 与 settings 不内联在头部，而是在 `SpacePayload` 里单独传递。
+
+---
+
+## 7. 资料索引
+
+### 7.1 官方文档（外部）
+
+| 资料 | 用途 |
+| --- | --- |
+| https://sync.any.org/ | 协议总览：概念、网络与基础设施、访问控制 |
+| https://sync.any.org/concepts/ | Space / Object / Change / ACL / 冲突解决 / 快照 |
+| https://sync.any.org/networking/ | 四类节点职责；**Channel Routing：客户端向协调节点查询该 Channel 存在哪** |
+| https://sync.any.org/access-control/ | ACL 记录类型、密钥分发 |
+| https://github.com/anyproto/any-sync-sdk/tree/main/docs | SDK 文档：`object.md`、`space.md`、`crdt.md`、`data-structure.md` 等 24 篇 |
+
+### 7.2 仓库内文档
+
+| 路径 | 内容 |
+| --- | --- |
+| `src/any-sync/docs/rpc-error-offsets.md` | 错误码全局分配表 |
+| `src/any-sync/docs/stateless-pubsub.md` | 空间内无状态 Pub/Sub 设计 |
+| `docs/protoinchinese/` | 38 个 `.proto` 中文注释版（10 个核心协议人工精翻）+ `README.md` 索引 |
+| `TECH-ARCHI.md` | 历史环境搭建、迁移记录 |
+
+### 7.3 关键源码位置
+
+| 主题 | 位置 |
+| --- | --- |
+| 对象同步入口 | `any-sync/commonspace/sync/objectsync/synchandler.go` |
+| 请求/响应收集 | `any-sync/commonspace/sync/requestmanager.go`、`object/tree/synctree/responsecollector.go` |
+| 树根构造 | `object/tree/objecttree/objecttreefactory.go`（`CreateObjectTreeRoot`） |
+| 空间创建载荷 | `commonspace/spacepayloads` |
+| 节点侧流处理 | `any-sync-node/nodespace/streamopener.go`、`rpchandler.go` |
+| 节点空间加载 | `any-sync-node/nodespace/service.go`（`loadSpace`） |
+
+---
+
+## 8. 当前实现状态
+
+| 能力 | 状态 | 位置 |
+| --- | --- | --- |
+| 协调节点取配置 | ✅ | 探针 `playground/probe-coord` |
+| 建用户域 + SpacePush | ✅ | `test/tools/userdomain-web/objectmodel.go` |
+| 库/记录对象写入（含反向流服务端） | ✅ | `objectsync.go`、`objectmodel.go` |
+| 按 ID 读对象并解密 | ✅ | `objects.go`（`fetchTreeRoot` / `decryptRootPayload`） |
+| 可视化库列表 / 新建库 / 写记录 / 从网络刷新 | ✅ | `web/index.html` |
+| 跨设备对象枚举（全新安装） | ❌ 未实现 | 目前靠本地 `data/libraries.jsonl` 记录对象 ID |
+| PubSub 订阅推送 | ❌ 未实现 | 见第 6 节约定 |
+
+> `test/` 与 `playground/` 按约定不入库，仅本地保留。
+
+---
+
+## 9. 排障时最容易踩的坑
+
+| 现象 | 真实原因 |
+| --- | --- |
+| 节点日志反复 `tree does not exist` | 客户端没有接受节点在已拨出连接上反向打开的流 |
+| `HeadSync` 看不到新对象 | HeadSync 是差异同步，不是全量枚举 |
+| `ObjectSyncRequestStream` 直接推 headUpdate 返回 `tree not found` | 该接口是**拉取**语义，只接受 `FullSyncRequest` |
+| 两个客户端 networkId 不一致 | 用了本地配置 ID 而非协调节点返回的 `networkId` |
+| 空间 60 秒后被关闭 | `space.gcTTL` 正常回收，不是错误 |
+| 只推一个节点时另外两个返回 `tree not found` | 写入需遍历全部负责节点 |
