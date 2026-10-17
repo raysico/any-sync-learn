@@ -1,0 +1,27 @@
+// ============================================================
+// 源文件：src/net/endtoendtest/testpeer/testproto/protos/testservice.proto
+// 所属仓库：any-sync
+// proto 包：testService
+// 服务：Test
+// RPC 数量：4
+// 说明：由 scripts/translate-proto.py 生成；字段名、编号、类型保持原样，注释译为中文。
+// ============================================================
+
+syntax = "proto3";
+package testService;
+
+option go_package = "net/endtoendtest/testpeer/testproto";
+
+service Test {
+    rpc BiDirectionalStream(stream StreamMessage) returns (stream StreamMessage);
+    rpc ServerStream(StreamMessage) returns (stream StreamMessage);
+    rpc ClientStream(stream StreamMessage) returns (StreamMessage);
+    rpc Unary(StreamMessage) returns (StreamMessage);
+}
+
+
+message StreamMessage {
+    string reqData = 1;
+    int64 repeat = 2;
+    int64 n = 3;
+}

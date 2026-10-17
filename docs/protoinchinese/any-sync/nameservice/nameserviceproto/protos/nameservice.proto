@@ -1,0 +1,100 @@
+// ============================================================
+// 源文件：src/nameservice/nameserviceproto/protos/nameservice.proto
+// 所属仓库：any-sync
+// proto 包：（无）
+// 服务：Anyns
+// RPC 数量：8
+// 说明：由 scripts/translate-proto.py 生成；字段名、编号、类型保持原样，注释译为中文。
+// ============================================================
+
+syntax = "proto3";
+option go_package = "nameservice/nameserviceproto";
+
+// import "google/protobuf/时间戳.proto";
+import "nameservice/nameserviceproto/protos/nameservice_aa.proto";
+
+message NameAvailableRequest {
+// Name including。任意 suffix
+  string fullName = 1;
+}
+
+message BatchNameAvailableRequest {
+// Names including。任意 suffix
+  repeated string fullNames = 1;
+}
+
+message NameByAddressRequest {
+// 【原文】EOA -> SCW -> name
+// 【原文】A SCW Ethereum address that owns that name
+  string ownerScwEthAddress = 1;
+}
+
+message BatchNameByAddressRequest {
+// 【原文】EOA -> SCW -> name
+// 【原文】A SCW Ethereum address that owns that name
+  repeated string ownerScwEthAddresses = 1;
+}
+
+message NameByAnyIdRequest {
+  string anyAddress = 1;
+}
+
+message BatchNameByAnyIdRequest {
+  repeated string anyAddresses = 1;
+}
+
+message NameAvailableResponse {
+  bool available = 1;
+  
+// 【原文】EOA -> SCW -> name
+// 该 字段 是 non-empty 仅 如果 name 是 "already registered"
+  string ownerScwEthAddress = 2;
+  
+// 该 字段 是 non-empty 仅 如果 name 是 "already registered"
+  string ownerEthAddress = 3;
+
+// A content hash attached 到 该 name
+// 该 字段 是 non-empty 仅 如果 name 是 "already registered"
+  string ownerAnyAddress = 4;
+
+// A SpaceID attached 到 该 name
+// 该 字段 是 non-empty 仅 如果 name 是 "already registered"
+  string spaceId = 5;
+
+// doesn't work 带有 marashalling/unmarshalling
+// google.protobuf.时间戳 nameExpires = 5 [(gogoproto.stdtime) = 是];
+  int64 nameExpires = 6;
+}
+
+message BatchNameAvailableResponse {
+  repeated NameAvailableResponse results = 1;
+}
+
+message NameByAddressResponse {
+  bool found = 1;
+
+  string name = 2;
+}
+
+message BatchNameByAddressResponse {
+  repeated NameByAddressResponse results = 1;
+}
+
+service Anyns {
+// 【原文】Lookup: name -> address
+  rpc IsNameAvailable(NameAvailableRequest) returns (NameAvailableResponse) {}
+  rpc BatchIsNameAvailable(BatchNameAvailableRequest) returns (BatchNameAvailableResponse) {}
+
+// 【原文】Reverse lookup: address -> name
+  rpc GetNameByAddress(NameByAddressRequest) returns (NameByAddressResponse) {}
+  rpc BatchGetNameByAddress(BatchNameByAddressRequest) returns (BatchNameByAddressResponse) {}
+
+// Reverse lookup: 任意 ID -> name
+  rpc GetNameByAnyId(NameByAnyIdRequest) returns (NameByAddressResponse) {}
+  rpc BatchGetNameByAnyId(BatchNameByAnyIdRequest) returns (BatchNameByAddressResponse) {}
+
+// Register 新 name 用于 用户 (在 behalf 的 用户)
+// Anytype 可 仅 register names 用于 用户, but 可 不 transfer!
+  rpc AdminNameRegisterSigned(NameRegisterRequestSigned) returns (OperationResponse) {}
+  rpc AdminNameRenewSigned(NameRenewRequestSigned) returns (OperationResponse) {}
+}

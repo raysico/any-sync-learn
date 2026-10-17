@@ -1,0 +1,274 @@
+// ============================================================
+// 源文件：src/any-sync/commonspace/object/acl/aclrecordproto/protos/aclrecord.proto
+// 所属仓库：any-sync ｜ proto 包：aclrecord
+// 说明：ACL（访问控制列表）是严格有序的记录链，每条记录描述成员增删、密钥轮换或权限变更。
+//       读权限由 ReadKey 加密分发实现；写权限在记录被验证时强制。
+// ============================================================
+
+syntax = "proto3";
+package aclrecord;
+option go_package = "commonspace/object/acl/aclrecordproto";
+
+// AclRoot 是访问控制列表的根记录（空间创建时离线生成）
+message AclRoot {
+    // identity 是所有者/创建者的身份公钥
+    bytes identity = 1;
+    // masterKey 是所有者主密钥（用于在 ACL 记录中签名或恢复身份）
+    bytes masterKey = 2;
+    // spaceId 是所属空间 ID
+    string spaceId = 3;
+    // encryptedReadKey 是用所有者公钥加密的空间读密钥
+    bytes encryptedReadKey = 4;
+    // timestamp 是创建时间戳
+    int64 timestamp = 5;
+    // identitySignature 是身份对根记录的签名
+    bytes identitySignature = 6;
+    // metadataPubKey 是元数据公钥（加密身份元数据用）
+    bytes metadataPubKey = 7;
+    // encryptedMetadataPrivKey 是用读密钥加密的元数据私钥
+    bytes encryptedMetadataPrivKey = 8;
+    // encryptedOwnerMetadata 是用元数据密钥加密的所有者元数据
+    bytes encryptedOwnerMetadata = 9;
+    // oneToOneInfo 仅在一对一空间存在
+    AclOneToOneInfo oneToOneInfo = 10;
+    // options 是空间级开关
+    AclSpaceOptions options = 11;
+}
+
+// AclSpaceOptions 包含空间级开关/选项
+message AclSpaceOptions {
+    // deleteRestricted 为 true 时限制空间删除
+    bool deleteRestricted = 1;
+}
+
+// AclSpaceOptionsChange 修改空间选项（仅所有者）
+message AclSpaceOptionsChange {
+    AclSpaceOptions options = 1;
+}
+
+// AclOneToOneInfo 一对一空间 ACL 记录的附加信息
+message AclOneToOneInfo {
+    // owner 是一对一空间的所有者
+    bytes owner = 1;
+    // writers 是具备写权限的成员
+    repeated bytes writers = 2;
+}
+// AclAccountInvite 包含公开的邀请密钥，其私钥部分线下直接发给被邀请人
+message AclAccountInvite {
+    // inviteKey 是邀请公钥
+    bytes inviteKey = 1;
+    // inviteType 是邀请类型（需审批 / 任何人可加入）
+    AclInviteType inviteType = 2;
+
+    // permissions 指定加入者获得的权限；仅在“无需审批”的邀请中使用
+    AclUserPermissions permissions = 3;
+    // encryptedReadKey 用于“无需审批”的邀请：任何持邀请的人都能立即加入空间，
+    // 该读密钥只能用 inviteKey 解开
+    bytes encryptedReadKey = 4;
+}
+
+// AclAccountInviteChange 修改已有邀请的权限
+message AclAccountInviteChange {
+    // inviteRecordId 指向被修改的邀请记录
+    string inviteRecordId = 1;
+    // permissions 是修改后的权限
+    AclUserPermissions permissions = 2;
+}
+
+// 邀请类型
+enum AclInviteType {
+    // 需申请加入（管理员审批）
+    RequestToJoin = 0;
+    // 任何人持邀请即可加入
+    AnyoneCanJoin = 1;
+}
+
+// AclOwnershipChange 转移空间所有权
+message AclOwnershipChange {
+    // newOwnerIdentity 是新所有者身份
+    bytes newOwnerIdentity = 1;
+    // oldOwnerPermissions 是原所有者降级后的权限
+    AclUserPermissions oldOwnerPermissions = 2;
+}
+
+// AclAccountRequestJoin 申请加入：引用邀请记录，并由邀请私钥确认
+message AclAccountRequestJoin {
+    // inviteIdentity 是申请者用邀请私钥派生的身份
+    bytes inviteIdentity = 1;
+    // inviteRecordId 指向邀请记录
+    string inviteRecordId = 2;
+    // inviteIdentitySignature 是邀请身份的签名
+    bytes inviteIdentitySignature = 3;
+    // metadata 是申请者元数据（用空间元数据密钥加密）
+    bytes metadata = 4;
+}
+
+// AclAccountInviteJoin 直接凭邀请加入（无需审批）。
+// 申请者必须用自己的公钥加密读密钥
+message AclAccountInviteJoin {
+    // identity 是加入者身份
+    bytes identity = 1;
+    // inviteRecordId 指向邀请记录
+    string inviteRecordId = 2;
+    // inviteIdentitySignature 是邀请身份签名
+    bytes inviteIdentitySignature = 3;
+    // metadata 是加入者元数据（用空间元数据密钥加密）
+    bytes metadata = 4;
+    // encryptedReadKey 是用加入者公钥加密的空间读密钥
+    bytes encryptedReadKey = 5;
+    // permissions 是加入后获得的权限
+    AclUserPermissions permissions = 6;
+}
+
+// AclAccountRequestAccept 批准加入申请：引用申请记录，并用申请者身份加密全部读密钥
+message AclAccountRequestAccept {
+    // identity 是申请者身份
+    bytes identity = 1;
+    // requestRecordId 指向被批准的申请记录
+    string requestRecordId = 2;
+    // encryptedReadKey 是用申请者身份加密的读密钥
+    bytes encryptedReadKey = 3;
+    // permissions 是授予的权限
+    AclUserPermissions permissions = 4;
+}
+
+// AclAccountRequestDecline 拒绝加入申请
+message AclAccountRequestDecline {
+    // requestRecordId 指向被拒绝的申请记录
+    string requestRecordId = 1;
+}
+
+// AclAccountInviteRevoke 撤销邀请记录
+message AclAccountInviteRevoke {
+    // inviteRecordId 指向被撤销的邀请记录
+    string inviteRecordId = 1;
+}
+
+// AclEncryptedReadKey 是发给特定身份的加密读密钥
+message AclEncryptedReadKey {
+    // identity 是接收者身份
+    bytes identity = 1;
+    // encryptedReadKey 是用该身份公钥加密的读密钥
+    bytes encryptedReadKey = 2;
+}
+
+// AclAccountPermissionChanges 批量修改若干身份的权限
+message AclAccountPermissionChanges {
+    repeated AclAccountPermissionChange changes = 1;
+}
+
+// AclAccountsAdd 批量添加账户
+message AclAccountsAdd {
+    repeated AclAccountAdd additions = 1;
+}
+
+// AclAccountAdd 新增一个账户（所有者直接添加，无需申请）
+message AclAccountAdd {
+    // identity 是新增账户身份
+    bytes identity = 1;
+    // permissions 是授予的权限
+    AclUserPermissions permissions = 2;
+    // metadata 是用元数据密钥加密的账户元数据
+    bytes metadata = 3;
+    // encryptedReadKey 是用该账户公钥加密的读密钥
+    bytes encryptedReadKey = 4;
+}
+
+// AclAccountRequestCancel 账户自己取消此前发出的请求
+message AclAccountRequestCancel {
+    // recordId 指向被取消的记录
+    string recordId = 1;
+}
+
+// AclAccountPermissionChange 修改单个账户的权限（已废弃，用批量版）
+message AclAccountPermissionChange {
+    // identity 是目标账户
+    bytes identity = 1;
+    // permissions 是新权限
+    AclUserPermissions permissions = 2;
+}
+
+// AclReadKeyChange 轮换空间的读密钥
+message AclReadKeyChange {
+    // accountKeys 是发给各成员的加密读密钥
+    repeated AclEncryptedReadKey accountKeys = 1;
+    // metadataPubKey 是元数据公钥
+    bytes metadataPubKey = 2;
+    // encryptedMetadataPrivKey 是用新读密钥加密的元数据私钥
+    bytes encryptedMetadataPrivKey = 3;
+    // encryptedOldReadKey 是用新读密钥加密的旧读密钥（形成密钥链）
+    bytes encryptedOldReadKey = 4;
+    // inviteKeys 是发给各邀请的加密读密钥
+    repeated AclEncryptedReadKey inviteKeys = 5;
+}
+
+// AclAccountRemove 移除账户并轮换读密钥
+message AclAccountRemove {
+    // identities 是被移除的账户
+    repeated bytes identities = 1;
+    // readKeyChange 是配套的读密钥轮换
+    AclReadKeyChange readKeyChange = 2;
+}
+
+// AclAccountRequestRemove 发起移除某账户的请求（需审批）
+message AclAccountRequestRemove {
+}
+
+// AclContentValue 是 ACL 记录可承载的所有操作类型
+message AclContentValue {
+    oneof value {
+        // 创建邀请
+        AclAccountInvite invite = 1;
+        // 撤销邀请
+        AclAccountInviteRevoke inviteRevoke = 2;
+        // 申请加入
+        AclAccountRequestJoin requestJoin = 3;
+        // 批准加入
+        AclAccountRequestAccept requestAccept = 4;
+        // 修改权限（已废弃）
+        AclAccountPermissionChange permissionChange = 5;
+        // 移除账户
+        AclAccountRemove accountRemove = 6;
+        // 轮换读密钥
+        AclReadKeyChange readKeyChange = 7;
+        // 拒绝加入申请
+        AclAccountRequestDecline requestDecline = 8;
+        // 发起移除账户请求
+        AclAccountRequestRemove accountRequestRemove = 9;
+        // 批量修改权限
+        AclAccountPermissionChanges permissionChanges = 10;
+        // 批量添加账户
+        AclAccountsAdd accountsAdd = 11;
+        // 取消请求
+        AclAccountRequestCancel requestCancel = 12;
+        // 凭邀请直接加入
+        AclAccountInviteJoin inviteJoin = 13;
+        // 修改邀请
+        AclAccountInviteChange inviteChange = 14;
+        // 转移所有权
+        AclOwnershipChange ownershipChange = 15;
+        // 修改空间选项
+        AclSpaceOptionsChange spaceOptionsChange = 16;
+    }
+}
+
+// AclData 是一条 ACL 记录的内容载荷
+message AclData {
+    repeated AclContentValue aclContent = 1;
+}
+
+// 用户在空间内的权限角色（权限从高到低）
+enum AclUserPermissions {
+    // 无权限
+    None = 0;
+    // 所有者：全部控制权，可重新配置或移除空间
+    Owner = 1;
+    // 管理员：可邀请/移除成员、修改权限与对象
+    Admin = 2;
+    // 写者：可创建与修改对象
+    Writer = 3;
+    // 读者：只读
+    Reader = 4;
+    // 访客：受限只读
+    Guest = 5;
+}

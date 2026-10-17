@@ -1,0 +1,60 @@
+// ============================================================
+// 源文件：src/any-sync/commonspace/clientspaceproto/protos/clientspace.proto
+// 所属仓库：any-sync ｜ proto 包：clientspace
+// 说明：局域网中两台客户端互相告知“我有哪些空间”的协议。
+// ============================================================
+
+syntax = "proto3";
+package clientspace;
+
+option go_package = "commonspace/clientspaceproto";
+
+service ClientSpace {
+    // SpaceExchange：向任意局域网 peer 发送明文的空间 ID 列表。
+    // 已废弃：会把完整的空间集合泄露给未认证的陌生人；请使用 SpaceExchangeV2。
+    rpc SpaceExchange(SpaceExchangeRequest) returns (SpaceExchangeResponse);
+    // SpaceExchangeV2：两台局域网 peer 只交换空间集合的交集。
+    // 不直接发空间 ID，而是交换由“空间首个 ACL 读密钥”派生的发现密钥做的 HMAC 令牌——
+    // 只有成员才持有该密钥。有效令牌既对非成员隐藏空间，又证明发送方的成员身份。
+    rpc SpaceExchangeV2(SpaceExchangeV2Request) returns (SpaceExchangeV2Response);
+}
+
+// SpaceExchangeRequest 是旧版交换请求
+message SpaceExchangeRequest {
+    // 我的空间 ID 列表
+    repeated string spaceIds = 1;
+    // 我的本地服务地址
+    LocalServer localServer = 2;
+}
+
+// SpaceExchangeResponse 是旧版交换响应
+message SpaceExchangeResponse {
+    // 对方的空间 ID 列表
+    repeated string spaceIds = 1;
+}
+
+// SpaceExchangeV2Request 是 V2 交换请求
+message SpaceExchangeV2Request {
+    // nonce 是调用方选定的 32 字节随机数，用于挑战请求与响应令牌
+    bytes nonce = 1;
+    // spaceTokens 每个我的空间对应一个 32 字节请求令牌，
+    // 会用随机令牌填充到桶大小并排序，以隐藏真实数量
+    repeated bytes spaceTokens = 2;
+    // 我的本地服务地址
+    LocalServer localServer = 3;
+}
+
+// SpaceExchangeV2Response 是 V2 交换响应
+message SpaceExchangeV2Response {
+    // spaceTokens 每个交集空间对应一个 32 字节响应令牌，
+    // 即响应方的成员证明，以调用方 nonce 为密钥
+    repeated bytes spaceTokens = 1;
+}
+
+// LocalServer 描述本地可连接的地址
+message LocalServer {
+    // IP 地址列表
+    repeated string Ips = 1;
+    // 端口
+    int32 port = 2;
+}

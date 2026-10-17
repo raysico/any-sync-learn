@@ -1,0 +1,81 @@
+// ============================================================
+// 源文件：src/pkg/lib/pb/model/protos/localstore.proto
+// 所属仓库：anytype-heart
+// proto 包：anytype.model
+// 服务：（无 service，仅 message 定义）
+// RPC 数量：0
+// 说明：由 scripts/translate-proto.py 生成；字段名、编号、类型保持原样，注释译为中文。
+// ============================================================
+
+syntax = "proto3";
+package anytype.model;
+option go_package = "pkg/lib/pb/model";
+
+import "google/protobuf/struct.proto";
+import "pkg/lib/pb/model/protos/models.proto";
+
+message ObjectInfo {
+    string id = 1;
+    repeated string objectTypeUrls = 2; // 已废弃
+    google.protobuf.Struct details = 3;
+    repeated Relation relations = 4; // 已废弃
+
+    string snippet = 5;
+    bool hasInboundLinks = 6; // 已废弃
+}
+
+message ObjectDetails {
+    google.protobuf.Struct details = 1;
+}
+
+message ObjectLinks {
+    repeated string inboundIDs = 1;
+    repeated string outboundIDs = 2;
+}
+
+message ObjectLinksInfo {
+    repeated ObjectInfo inbound = 1;
+    repeated ObjectInfo outbound = 2;
+}
+
+message ObjectInfoWithLinks {
+    string id = 1;
+    ObjectInfo info = 2;
+    ObjectLinksInfo links = 3;
+}
+
+message ObjectInfoWithOutboundLinks {
+    string id = 1;
+    ObjectInfo info = 2;
+    repeated ObjectInfo outboundLinks = 3;
+}
+
+message ObjectInfoWithOutboundLinksIDs {
+    string id = 1;
+    ObjectInfo info = 2;
+    repeated string outboundLinks = 3;
+}
+
+message ObjectStoreChecksums {
+    string bundledObjectTypes = 1;
+    string bundledRelations = 2;
+    string bundledLayouts = 3;
+    int32 objectsForceReindexCounter = 4; // increased 在 order 到 trigger 所有 对象 reindex
+    int32 filesForceReindexCounter = 5; // increased 在 order 到 fully reindex 所有 对象
+    int32 idxRebuildCounter = 6; // increased 在 order 到 remove indexes and reindex everything. Automatically triggers 对象 and 文件 reindex(one 时间 仅)
+    int32 fulltextRebuild = 7; // 已废弃 increased 在 order 到 perform fulltext indexing 用于 所有 类型 的 对象 (useful when we change fulltext config)
+    int32 fulltextErase = 11; // 已废弃 remove 所有 fulltext indexes and add 到 reindex queue after
+    string bundledTemplates = 8;
+    int32 bundledObjects = 9; // anytypeProfile and maybe some others 在 feature
+    int32 filestoreKeysForceReindexCounter = 10;
+    bool areOldFilesRemoved = 12;
+    bool areDeletedObjectsReindexed = 13; // 已废弃
+    int32 linksErase = 14;
+    int32 marketplaceForceReindexCounter = 15;
+    int32 reindexDeletedObjects = 16;
+    int32 reindexParticipants = 17;
+    int32 reindexChats = 18;
+    int32 reindexFulltextChatMessages = 19;
+    int32 invalidateObjectsIndex = 20;
+    int32 reindexDiscussions = 21;
+}

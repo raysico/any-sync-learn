@@ -1,0 +1,642 @@
+// ============================================================
+// 源文件：src/any-sync/coordinator/coordinatorproto/protos/coordinator.proto
+// 所属仓库：any-sync ｜ proto 包：coordinator ｜ 错误码区间：300–399
+// 说明：协调节点负责空间生命周期（签名、状态、删除）、网络配置下发、
+//       ACL 记录追加与事件日志、账户收件箱、文件配额等。
+// ============================================================
+
+syntax = "proto3";
+package coordinator;
+
+option go_package = "coordinator/coordinatorproto";
+
+service Coordinator {
+  // SpaceSign：为“创建空间”操作签名（返回回执，SpacePush 时作为凭证）
+  rpc SpaceSign(SpaceSignRequest) returns (SpaceSignResponse);
+
+  // SpaceStatusCheck：查询单个空间的状态（是否已删除等）
+  rpc SpaceStatusCheck(SpaceStatusCheckRequest) returns (SpaceStatusCheckResponse);
+
+  // SpaceStatusCheckMany：批量查询空间状态
+  rpc SpaceStatusCheckMany(SpaceStatusCheckManyRequest) returns (SpaceStatusCheckManyResponse);
+
+  // SpaceStatusChange：修改空间状态（已废弃）
+  rpc SpaceStatusChange(SpaceStatusChangeRequest) returns (SpaceStatusChangeResponse);
+
+  // SpaceMakeShareable：把空间标记为可共享
+  rpc SpaceMakeShareable(SpaceMakeShareableRequest) returns (SpaceMakeShareableResponse);
+
+  // SpaceMakeUnshareable：把空间标记为不可共享
+  rpc SpaceMakeUnshareable(SpaceMakeUnshareableRequest) returns (SpaceMakeUnshareableResponse);
+
+  // NetworkConfiguration：获取最新的网络配置（节点清单）
+  rpc NetworkConfiguration(NetworkConfigurationRequest) returns (NetworkConfigurationResponse);
+
+  // DeletionLog：获取最新的删除日志记录
+  rpc DeletionLog(DeletionLogRequest) returns (DeletionLogResponse);
+
+  // SpaceDelete：删除空间
+  rpc SpaceDelete(SpaceDeleteRequest) returns (SpaceDeleteResponse);
+
+  // AccountDelete：删除账户
+  rpc AccountDelete(AccountDeleteRequest) returns (AccountDeleteResponse);
+
+  // AccountRevertDeletion：撤销账户删除
+  rpc AccountRevertDeletion(AccountRevertDeletionRequest) returns (AccountRevertDeletionResponse);
+
+  // AclAddRecord：向 ACL 日志追加记录（仅 any-sync-node）
+  rpc AclAddRecord(AclAddRecordRequest) returns (AclAddRecordResponse);
+  // AclGetRecords：获取 ACL 记录
+  rpc AclGetRecords(AclGetRecordsRequest) returns (AclGetRecordsResponse);
+  // AccountLimitsSet：设置账户级限额（仅网络配置成员可调用）
+  rpc AccountLimitsSet(AccountLimitsSetRequest) returns (AccountLimitsSetResponse);
+
+  // AclEventLog：获取最新的 ACL 事件日志记录
+  rpc AclEventLog(AclEventLogRequest) returns (AclEventLogResponse);
+
+  // InboxFetch：从给定偏移开始获取（新的）收件箱消息
+  rpc InboxFetch(InboxFetchRequest) returns (InboxFetchResponse);
+
+  // InboxAddMessage：向收件箱追加消息
+  rpc InboxAddMessage(InboxAddMessageRequest) returns (InboxAddMessageResponse);
+
+  // NotifySubscribe：订阅新消息等通知（服务端流）
+  rpc NotifySubscribe(NotifySubscribeRequest) returns (stream NotifySubscribeEvent);
+  // AclUploadInvite：把邀请的二进制数据上传到文件节点
+  rpc AclUploadInvite(AclUploadInviteRequest) returns (AclUploadInviteResponse);
+  // AclDeleteInvite：从文件节点永久移除已撤销邀请的文件。
+  // 调用者必须是空间所有者，且该邀请已在 ACL 中被撤销。
+  rpc AclDeleteInvite(AclDeleteInviteRequest) returns (AclDeleteInviteResponse);
+  // FileLimitsGet：返回某上传者身份在某空间内的文件存储配额（files v2，仅 fileV2 节点）。
+  // 返回的是绝对上限，调用方自行计算剩余可用量。
+  rpc FileLimitsGet(FileLimitsGetRequest) returns (FileLimitsGetResponse);
+  // FileUsageReport：fileV2 节点上报按（空间, 身份）维度的持久化文件用量。
+  // 上报节点取自已认证的 peer 上下文；数值为绝对值（重复上报幂等）。
+  rpc FileUsageReport(FileUsageReportRequest) returns (FileUsageReportResponse);
+}
+
+
+// SpaceSignRequest 是空间签名请求
+message SpaceSignRequest {
+  // SpaceId 是被签名的空间 ID
+  string spaceId = 1;
+  // Header 是空间头部的序列化字节
+  bytes header = 2;
+  // 已废弃：oldIdentity 不再使用
+  bytes oldIdentity = 3 [deprecated = true];
+  // 已废弃：newIdentitySignature 不再使用
+  bytes newIdentitySignature = 4 [deprecated = true];
+  // forceRequest 为 true 时，即使该空间此前被删除过也强制签发回执
+  bool forceRequest = 5;
+}
+
+// 错误码（区间 300–399）
+enum ErrorCodes {
+  // 未知 / 兜底
+  Unexpected = 0;
+  // 空间已删除
+  SpaceDeleted = 1;
+  // 空间等待删除
+  SpaceDeletionPending = 2;
+  // 空间已创建
+  SpaceCreated = 3;
+  // 空间不存在
+  SpaceNotExists = 4;
+  // 已达空间数量上限
+  SpaceLimitReached = 5;
+  // 账户已删除
+  AccountDeleted = 6;
+  // 禁止操作
+  Forbidden = 7;
+  // 缺少 ACL 头
+  AclHeadIsMissing = 8;
+  // ACL 非空（期望为空）
+  AclNonEmpty = 9;
+  // 空间不可共享
+  SpaceNotShareable = 10;
+  // 收件箱消息校验失败
+  InboxMessageVerifyFailed = 11;
+  // 该 peer 已订阅
+  SubscribePeerAlreadySubscribed = 12;
+  // 邀请仍有效（不能删除）
+  InviteStillActive = 13;
+  // 错误码区间基准
+  ErrorOffset = 300;
+}
+
+// 空间状态
+enum SpaceStatus {
+  // 已创建（正常）
+  SpaceStatusCreated = 0;
+  // 等待删除
+  SpaceStatusPendingDeletion = 1;
+  // 已开始删除
+  SpaceStatusDeletionStarted = 2;
+  // 已删除
+  SpaceStatusDeleted = 3;
+  // 不存在
+  SpaceStatusNotExists = 4;
+}
+
+// 请求者对空间的权限
+enum SpacePermissions {
+  // 未知
+  SpacePermissionsUnknown = 0;
+  // 所有者
+  SpacePermissionsOwner = 1;
+}
+
+// 空间成员上限
+message SpaceLimits {
+  // 可读成员上限
+  uint32 readMembers = 1;
+  // 可写成员上限
+  uint32 writeMembers = 2;
+}
+
+// 空间状态载荷
+message SpaceStatusPayload {
+  // 状态
+  SpaceStatus status = 1;
+  // 删除时间戳
+  int64 deletionTimestamp = 2;
+  // 请求者的权限
+  SpacePermissions permissions = 3;
+  // 成员上限
+  SpaceLimits limits = 4;
+  // 是否已共享
+  bool isShared = 5;
+}
+
+// SpaceSignResponse 是签名结果
+message SpaceSignResponse {
+  // 带签名的空间回执
+  SpaceReceiptWithSignature receipt = 1;
+}
+
+// SpaceReceiptWithSignature 包含序列化的回执及其签名
+message SpaceReceiptWithSignature {
+  // 回执载荷
+  bytes spaceReceiptPayload = 1;
+  // 网络签名
+  bytes signature = 2;
+}
+
+// SpaceReceipt 是执行 SpacePush 操作的凭证
+message SpaceReceipt {
+  // 空间 ID
+  string spaceId = 1;
+  // 申请回执者的 peer ID
+  string peerId = 2;
+  // 空间所有者的身份
+  bytes accountIdentity = 3;
+  // 签发该回执的网络 ID
+  string networkId = 4;
+  // 回执有效期（unix 时间戳）
+  uint64 validUntil = 5;
+}
+
+// SpaceStatusCheckRequest 查询单个空间的状态
+message SpaceStatusCheckRequest {
+  string spaceId = 1;
+}
+
+// SpaceStatusCheckResponse 返回空间当前状态
+message SpaceStatusCheckResponse {
+  SpaceStatusPayload payload = 1;
+}
+
+// SpaceStatusCheckManyRequest 批量查询
+message SpaceStatusCheckManyRequest {
+  repeated string spaceIds = 1;
+}
+
+// SpaceStatusCheckManyResponse 批量状态
+message SpaceStatusCheckManyResponse {
+  repeated SpaceStatusPayload payloads = 1;
+  // 账户级限额
+  AccountLimits accountLimits = 2;
+}
+
+// AccountLimits 描述账户级限额
+message AccountLimits {
+  // 可共享空间数量上限
+  uint32 sharedSpacesLimit = 1;
+}
+
+
+// SpaceStatusChangeRequest：如需删除空间则携带删除载荷，否则为空
+message SpaceStatusChangeRequest {
+  string spaceId = 1;
+  string deletionPayloadId = 2;
+  bytes deletionPayload = 3;
+  DeletionPayloadType deletionPayloadType = 4;
+}
+
+// SpaceStatusChangeResponse 返回变更后的状态
+message SpaceStatusChangeResponse {
+  SpaceStatusPayload payload = 1;
+}
+
+// SpaceMakeShareableRequest 标记空间可共享
+message SpaceMakeShareableRequest {
+    string spaceId = 1;
+}
+
+message SpaceMakeShareableResponse {}
+
+// SpaceMakeUnshareableRequest 标记空间不可共享
+message SpaceMakeUnshareableRequest {
+  string spaceId = 1;
+  string aclHead = 2;
+}
+
+message SpaceMakeUnshareableResponse {}
+
+// NetworkConfigurationRequest 携带客户端当前配置 ID（可为空）
+message NetworkConfigurationRequest {
+  // 客户端当前配置 ID；
+  // 若等于最新配置 ID，则响应不包含节点列表
+  string currentId = 1;
+}
+
+// NetworkConfigurationResponse 返回节点列表
+message NetworkConfigurationResponse {
+  // 当前配置 ID
+  string configurationId = 1;
+  // 网络 ID
+  string networkId = 2;
+  // 节点列表（客户端 currentId 与 configurationId 相同时为空）
+  repeated Node nodes = 3;
+  // 配置创建时间（unix 时间戳）
+  uint64 creationTimeUnix = 4;
+  // 单调递增的配置版本号（不支持 epoch 的旧协调节点返回 0）
+  uint64 epoch = 5;
+  // fileV2 集群共享回执签名密钥的身份（网络字符串编码）；无 fileV2 集群时为空
+  string fileNetworkId = 6;
+}
+
+// NodeType 决定节点支持哪类 API
+enum NodeType {
+  // TreeAPI：空间/树同步 API
+  TreeAPI = 0;
+  // FileAPI：文件 API
+  FileAPI = 1;
+  // CoordinatorAPI：协调节点 API
+  CoordinatorAPI = 2;
+  // ConsensusAPI：共识节点 API
+  ConsensusAPI = 3;
+  // NamingNodeAPI：命名节点 API（见 any-ns-node 仓库）
+  NamingNodeAPI = 4;
+  // PaymentProcessingAPI：支付处理 API（见 any-pp-node 仓库）
+  PaymentProcessingAPI = 5;
+  // FileV2API：v2 文件 API（filenode v2 代理池）
+  FileV2API = 6;
+}
+
+// 删除载荷类型
+enum DeletionPayloadType {
+  // 树删除
+  Tree = 0;
+  // 确认删除
+  Confirm = 1;
+  // 账户删除
+  Account = 2;
+}
+
+// Node 描述网络中的一个节点
+message Node {
+  // peerId：libp2p 格式的 peer 标识（编码后的公钥）
+  string peerId = 1;
+  // 节点地址列表
+  repeated string addresses = 2;
+  // 支持的 API 类型
+  repeated NodeType types = 3;
+}
+
+// DeletionConfirmPayloadWithSignature 是序列化的删除确认载荷及其签名
+message DeletionConfirmPayloadWithSignature {
+  bytes deletionPayload = 1;
+  bytes signature = 2;
+}
+
+// DeletionConfirmPayload 是删除确认载荷
+message DeletionConfirmPayload {
+  // 空间 ID
+  string spaceId = 1;
+  // 申请者 peer ID
+  string peerId = 2;
+  // 空间所有者身份
+  bytes accountIdentity = 3;
+  // 发起删除请求的网络 ID
+  string networkId = 4;
+  // 删除请求时间戳
+  int64 timestamp = 5;
+}
+
+// DeletionLogRequest 请求删除日志
+message DeletionLogRequest {
+  // 已知的最后一条日志 ID，从其后开始取；为空则从头开始
+  string afterId = 1;
+  // 期望返回的记录数量
+  uint32 limit = 2;
+}
+
+
+// DeletionLogResponse 返回删除日志
+message DeletionLogResponse {
+  // 记录列表；无新记录时为空
+  repeated DeletionLogRecord records = 1;
+  // 是否还有剩余记录
+  bool hasMore = 2;
+}
+
+// DeletionLogRecord 是一条删除日志记录
+message DeletionLogRecord {
+  // 记录 ID
+  string id = 1;
+  // 空间 ID
+  string spaceId = 2;
+  // 空间状态
+  DeletionLogRecordStatus status = 3;
+  // 记录创建时间（unix 时间戳）
+  int64 timestamp = 4;
+  // 文件节点使用的分组键
+  string fileGroup = 5;
+  // ACL 记录 ID（可选）
+  string aclRecordId = 6;
+}
+
+// 删除日志记录状态
+enum DeletionLogRecordStatus {
+  // 正常，空间应照常运行
+  Ok = 0;
+  // 准备删除：空间应停止同步
+  RemovePrepare = 1;
+  // 应移除
+  Remove = 2;
+  // 所有权变更
+  OwnershipChange = 3;
+}
+
+// SpaceDeleteRequest 携带待删除空间的删除确认
+message SpaceDeleteRequest {
+  string spaceId = 1;
+  string deletionPayloadId = 2;
+  bytes deletionPayload = 3;
+  // 删除持续时长（秒）
+  int64 deletionDuration = 4;
+}
+
+// SpaceDeleteResponse 返回空间最终删除的时间戳
+message SpaceDeleteResponse {
+  int64 toBeDeletedTimestamp = 1;
+}
+
+// AccountDeleteRequest 携带账户删除载荷
+message AccountDeleteRequest {
+  string deletionPayloadId = 1;
+  bytes deletionPayload = 2;
+}
+
+// AccountDeletionConfirmPayload 是账户删除确认载荷
+message AccountDeletionConfirmPayload {
+  // 申请者 peer ID
+  string peerId = 1;
+  // 账户身份
+  bytes accountIdentity = 2;
+  // 发起删除请求的网络 ID
+  string networkId = 3;
+  // 请求时间戳
+  int64 timestamp = 4;
+}
+
+// AccountDeleteResponse 返回账户最终删除的时间戳
+message AccountDeleteResponse {
+  int64 toBeDeletedTimestamp = 1;
+}
+
+// AccountRevertDeletionRequest 撤销账户删除
+message AccountRevertDeletionRequest {
+}
+
+// AccountRevertDeletionResponse 空响应，表示删除已撤销
+message AccountRevertDeletionResponse {
+}
+
+// AclAddRecordRequest 包含序列化后的 consensusproto.RawRecord
+message AclAddRecordRequest {
+  string spaceId = 1;
+  bytes payload = 2;
+}
+
+// AclAddRecordResponse 返回新建记录 ID 与序列化后的记录
+message AclAddRecordResponse {
+  string recordId = 1;
+  bytes payload = 2;
+}
+
+// AclGetRecordsRequest 可带上已知的 ACL 头，服务端只返回其后新增的记录；
+// 不传则返回全部记录
+message AclGetRecordsRequest {
+  string spaceId = 1;
+  string aclHead = 2;
+}
+
+// AclGetRecordsResponse 返回序列化后的 consensusproto.RawRecordWithId 列表
+message AclGetRecordsResponse {
+  repeated bytes records = 1;
+}
+
+// AccountLimitsSetRequest 设置账户限额
+message AccountLimitsSetRequest {
+  string identity = 1;
+  string reason = 2;
+  uint64 fileStorageLimitBytes = 3;
+  uint32 spaceMembersRead = 4;
+  uint32 spaceMembersWrite = 5;
+  uint32 sharedSpacesLimit = 6;
+}
+
+message AccountLimitsSetResponse {}
+
+// AclEventLogRequest 请求 ACL 事件日志
+message AclEventLogRequest {
+  string accountIdentity = 1;
+  // 已知的最后一条日志 ID，从其后开始取；为空则从头开始
+  string afterId = 2;
+  // 期望返回的记录数量
+  uint32 limit = 3;
+}
+
+// AclEventLogResponse 返回 ACL 事件日志
+message AclEventLogResponse {
+  // 记录列表；无新记录时为空
+  repeated AclEventLogRecord records = 1;
+  // 是否还有剩余记录
+  bool hasMore = 2;
+}
+
+// ACL 事件记录类型
+enum AclEventLogRecordType {
+  // 空间回执（SpaceSign）
+  RecordTypeSpaceReceipt = 0;
+  // 空间被共享
+  RecordTypeSpaceShared = 1;
+  // 空间取消共享
+  RecordTypeSpaceUnshared = 2;
+  // 添加了一条 ACL 记录
+  RecordTypeSpaceAclAddRecord = 3;
+}
+
+// AclEventLogRecord 是一条 ACL 事件记录
+message AclEventLogRecord {
+  // 记录 ID
+  string id = 1;
+  // 空间 ID
+  string spaceId = 2;
+  // 记录创建时间（unix 时间戳）
+  int64 timestamp = 3;
+  // 事件类型
+  AclEventLogRecordType type = 4;
+  // 仅当 type 为 RecordTypeSpaceAclAddRecord 时有效
+  string aclChangeId = 5;
+}
+
+// 收件箱消息包类型
+enum InboxPacketType {
+  // 默认
+  Default = 0;
+}
+
+// 收件箱密钥类型
+enum InboxKeyType {
+  // ed25519
+  ed25519 = 0;
+}
+
+// InboxMessage 是一条收件箱消息
+message InboxMessage {
+  string id = 1;
+  InboxPacketType packetType = 2;
+  InboxPacket packet = 3;
+}
+
+// InboxPacket 是消息包
+message InboxPacket {
+  InboxKeyType keyType = 1;
+  string senderIdentity = 2;
+  string receiverIdentity = 3;
+  bytes senderSignature = 4;
+  InboxPayload payload = 5;
+}
+
+// 收件箱载荷类型
+enum InboxPayloadType {
+  // 一对一邀请
+  InboxPayloadOneToOneInvite = 0;
+  // 普通邀请
+  InboxPayloadRegularInvite = 1;
+}
+
+// InboxPayload 是消息载荷
+message InboxPayload {
+  InboxPayloadType payloadType = 1;
+  int64 timestamp = 2;
+  bytes body = 3;
+}
+
+// InboxFetchRequest 拉取收件箱
+message InboxFetchRequest {
+  string offset = 1;
+}
+
+// InboxFetchResponse 返回消息
+message InboxFetchResponse {
+  repeated InboxMessage messages = 1;
+  bool hasMore = 2;
+}
+
+// InboxAddMessageRequest 追加消息
+message InboxAddMessageRequest {
+  InboxMessage message = 1;
+}
+
+message InboxAddMessageResponse {
+}
+
+// 订阅通知请求
+message NotifySubscribeRequest {
+  // 要订阅的事件类型（可多选）
+  NotifyEventType eventType = 1;
+}
+
+// 通知事件类型
+enum NotifyEventType {
+  // 未指定
+  UnspecifiedEvent = 0;
+  // 收件箱新消息
+  InboxNewMessageEvent = 1;
+  // 网络配置变更
+  NetworkConfigChangedEvent = 2;
+}
+
+// 通知事件
+message NotifySubscribeEvent {
+  NotifyEventType eventType = 1;
+  bytes payload = 2;
+}
+
+// AclUploadInviteRequest 上传邀请数据
+message AclUploadInviteRequest {
+  bytes cid = 1;
+  bytes data = 2;
+  // spaceId 与 invitePubKey 把上传文件绑定到其邀请，便于后续 AclDeleteInvite 删除
+  string spaceId = 3;
+  // invitePubKey 是邀请密钥的公开部分；访客邀请时为访客密钥的公开部分
+  bytes invitePubKey = 4;
+}
+
+message AclUploadInviteResponse {}
+
+// AclDeleteInviteRequest 请求协调节点从文件节点移除已撤销邀请的文件。
+// 协调节点通过 AclUploadInvite 建立的绑定把 cid 解析到邀请，并拒绝删除仍然有效的邀请。
+message AclDeleteInviteRequest {
+  string spaceId = 1;
+  bytes inviteCid = 2;
+}
+
+message AclDeleteInviteResponse {}
+// FileLimitsGetRequest 查询文件配额
+message FileLimitsGetRequest {
+  string spaceId = 1;
+  // 上传者账户身份
+  string identity = 2;
+}
+
+// FileLimitsGetResponse 返回配额
+message FileLimitsGetResponse {
+  // 该身份的文件存储总上限（账户公共池）
+  uint64 accountLimitBytes = 1;
+  // 该身份在所有空间中的持久化用量（协调节点聚合）
+  uint64 accountTotalUsageBytes = 2;
+  // 空间级额外上限（可选）；0 表示未设置
+  uint64 spaceLimitBytes = 3;
+}
+
+// FileUsageReportRequest 上报文件用量
+message FileUsageReportRequest {
+  repeated FileUsageRow rows = 1;
+}
+
+// FileUsageRow 是一行用量
+message FileUsageRow {
+  string spaceId = 1;
+  // 被计入的上传者身份（根绑定记录最早的作者）
+  string identity = 2;
+  // 该（空间, 身份）切片的持久化字节数（按 HEAD 实测；不包含在途数据）
+  uint64 durableBytes = 3;
+  uint64 durableFilesCount = 4;
+}
+
+message FileUsageReportResponse {}

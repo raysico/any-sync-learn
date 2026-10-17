@@ -1,0 +1,57 @@
+// ============================================================
+// 源文件：src/pkg/lib/pb/storage/protos/file.proto
+// 所属仓库：anytype-heart
+// proto 包：anytype.storage
+// 服务：（无 service，仅 message 定义）
+// RPC 数量：0
+// 说明：由 scripts/translate-proto.py 生成；字段名、编号、类型保持原样，注释译为中文。
+// ============================================================
+
+syntax = "proto3";
+package anytype.storage;
+option go_package = "pkg/lib/pb/storage";
+
+import "google/protobuf/struct.proto";
+
+message Step {
+    string name = 1;
+    Link link   = 2;
+}
+
+message FileKeys {
+    map<string,string> keysByPath = 1;
+}
+
+message FileInfo {
+    string path = 16; // 用于 retrieving 密钥
+    string mill = 1;
+    string checksum = 2;
+    string source = 3;
+    string opts = 4;
+    string hash = 5;
+    string key = 6;
+    string media = 7;
+    string name = 8;
+    int64 size = 9; // useless 用于 variants, 使用 仅 带有 original 文件
+    int64 added = 10;
+    google.protobuf.Struct meta = 11; // goes straight 到 details, but width 是 使用 在 searching 用于 resize variant
+    reserved 12;
+    reserved 13;
+    string metaHash = 14;
+    int64 lastModifiedDate = 15;
+}
+
+message ImageResizeSchema {
+    string name                        = 1;
+    string mill                        = 4;
+    map<string, string> opts           = 5;
+    google.protobuf.Struct json_schema = 6;
+    repeated Link links            = 8;
+}
+
+message Link {
+    string name = 1;
+    string mill                        = 4;
+    map<string, string> opts           = 5;
+    google.protobuf.Struct json_schema = 6;
+}

@@ -1,0 +1,259 @@
+// ============================================================
+// 源文件：src/format/v1/proto/changes.proto
+// 所属仓库：any-block
+// proto 包：anytype
+// 服务：（无 service，仅 message 定义）
+// RPC 数量：0
+// 说明：由 scripts/translate-proto.py 生成；字段名、编号、类型保持原样，注释译为中文。
+// ============================================================
+
+syntax = "proto3";
+package anytype;
+option go_package = "github.com/anyproto/any-block/format/v1/pb";
+
+import "format/v1/proto/models.proto";
+import "format/v1/proto/events.proto";
+import "google/protobuf/struct.proto";
+
+// element 的 change 树 使用 到 存储 and internal apply smartBlock history
+message Change {
+// set 的 actions 到 apply
+    repeated Content content = 3;
+// 快照 - when 不 null, Content 将 被 ignored
+    Snapshot snapshot = 4;
+// 文件 密钥 related 到 changes content
+    repeated FileKeys fileKeys = 6;
+// creation 时间戳
+    int64 timestamp = 7;
+
+// version 的 business logic
+    uint32 version = 8;
+// business-level 类型 的 change applied 到 对象
+    uint32 changeType = 9;
+// integrationName 是 RAW app name 的 paired API 密钥 ，
+// authored 该 change — exactly as app link recorded it, never
+// normalized (normalization 是 many-to-one and lossy; DELETE
+// ownership rule compares 该 value exactly). Stamped by heart 来自
+// authenticated session — never accepted 来自 a 请求. Bounded
+// at 密钥 issuance (domain.MaxIntegrationNameLen). 空 用于 changes
+// 不 authored through an API 密钥.
+    string integrationName = 10;
+
+    message Snapshot {
+// 【原文】logId -> lastChangeId
+        map<string, string> logHeads = 1;
+// 快照 data
+        anytype.model.SmartBlockSnapshotBase data = 2;
+// 所有 文件 密钥 related 到 doc
+        repeated FileKeys fileKeys = 3;
+    }
+
+    message FileKeys {
+        string hash = 1;
+        map<string, string> keys = 2;
+    }
+
+    message Content {
+        oneof value {
+            BlockCreate blockCreate = 1;
+            BlockUpdate blockUpdate = 2;
+            BlockRemove blockRemove = 3;
+            BlockMove blockMove = 4;
+            BlockDuplicate blockDuplicate = 5;
+            RelationAdd relationAdd = 50;
+            RelationRemove relationRemove = 51;
+            DetailsSet detailsSet = 100;
+            DetailsUnset detailsUnset = 101;
+
+            ObjectTypeAdd objectTypeAdd = 105;
+            ObjectTypeRemove objectTypeRemove = 106;
+            StoreKeySet storeKeySet = 107;
+            StoreKeyUnset storeKeyUnset = 108;
+
+            StoreSliceUpdate storeSliceUpdate = 109;
+            OriginalCreatedTimestampSet originalCreatedTimestampSet = 110;
+            SetFileInfo setFileInfo = 111;
+            NotificationCreate notificationCreate = 112;
+            NotificationUpdate notificationUpdate = 113;
+
+            DeviceAdd deviceAdd = 114;
+            DeviceUpdate deviceUpdate = 115;
+        }
+        reserved 102,103,104; // 旧 unsupported relation changes
+    }
+
+    message BlockCreate {
+        string targetId = 1;
+        anytype.model.Block.Position position = 2;
+        repeated anytype.model.Block blocks = 3;
+    }
+
+    message BlockUpdate {
+        repeated Event.Message events = 2;
+    }
+
+    message BlockRemove {
+        repeated string ids = 1;
+    }
+
+    message BlockMove {
+        string targetId = 1;
+        anytype.model.Block.Position position = 2;
+        repeated string ids = 3;
+    }
+
+    message BlockDuplicate {
+        string targetId = 1;
+        anytype.model.Block.Position position = 2;
+        repeated string ids = 3;
+    }
+
+    message DetailsSet {
+        string key = 1;
+        google.protobuf.Value value = 2;
+    }
+
+    message DetailsUnset {
+        string key = 1;
+    }
+
+    message RelationAdd {
+        repeated anytype.model.RelationLink relationLinks = 1;
+    }
+
+    message RelationRemove {
+        repeated string relationKey = 1;
+    }
+
+    message ObjectTypeAdd {
+        string url = 1;
+        string key = 2;
+    }
+
+    message ObjectTypeRemove {
+        string url = 1;
+        string key = 2;
+    }
+
+    message StoreKeySet {
+        repeated string path = 1;
+        google.protobuf.Value value = 2;
+    }
+
+    message StoreKeyUnset {
+        repeated string path = 1;
+    }
+
+    message StoreSliceUpdate {
+        string key = 1;
+        oneof operation {
+            Add add = 2;
+            Remove remove = 3;
+            Move move = 4;
+        }
+
+        message Add {
+            string afterId = 1;
+            repeated string ids = 2;
+        }
+
+        message Remove {
+            repeated string ids = 1;
+        }
+
+        message Move {
+            string afterId = 1;
+            repeated string ids = 2;
+        }
+    }
+
+    message OriginalCreatedTimestampSet {
+        int64 ts = 1;
+    }
+
+    message SetFileInfo {
+        model.FileInfo fileInfo = 1;
+    }
+
+    message NotificationCreate {
+        anytype.model.Notification notification = 1;
+    }
+
+    message NotificationUpdate {
+        string id = 1;
+        anytype.model.Notification.Status status = 2;
+    }
+
+    message DeviceAdd {
+        anytype.model.DeviceInfo device = 1;
+    }
+
+    message DeviceUpdate {
+        string id = 1;
+        string name = 2;
+    }
+}
+
+message ChangeNoSnapshot {
+// set 的 actions 到 apply
+    repeated Change.Content content = 3;
+// 文件 密钥 related 到 changes content
+    repeated Change.FileKeys fileKeys = 6;
+// creation 时间戳
+    int64 timestamp = 7;
+// version 的 business logic
+    uint32 version = 8;
+// business-level 类型 的 change applied 到 对象
+    uint32 changeType = 9;
+// 【原文】integrationName mirrors Change.integrationName (the two messages share
+// wire numbers by design; 1/2/5 是 historical — do 不 reuse).
+    string integrationName = 10;
+}
+
+message StoreChange {
+    repeated StoreChangeContent changeSet = 1;
+}
+
+message StoreChangeContent {
+    oneof change {
+        DocumentCreate create = 1;
+        DocumentModify modify = 2;
+        DocumentDelete delete = 3;
+    }
+}
+
+message DocumentCreate {
+    string collection = 1;
+    string documentId = 2;
+// 【原文】json
+    string value = 3;
+}
+
+message DocumentModify {
+    string collection = 1;
+    string documentId = 2;
+    repeated KeyModify keys = 4;
+}
+
+message KeyModify {
+// 密钥 path; example: [用户, email]
+    repeated string keyPath = 1;
+// 【原文】modify op: set, unset, inc, etc.
+    ModifyOp modifyOp = 3;
+// json value; example: '"新@email.com"'
+    string modifyValue = 4;
+}
+
+enum ModifyOp {
+    Set = 0;
+    Unset = 1;
+    Inc = 2;
+    AddToSet = 3;
+    Pull = 4;
+}
+
+message DocumentDelete {
+    string collection = 1;
+    string documentId = 2;
+}
+

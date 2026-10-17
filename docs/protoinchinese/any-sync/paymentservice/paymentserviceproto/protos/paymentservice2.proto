@@ -1,0 +1,306 @@
+// ============================================================
+// 源文件：src/paymentservice/paymentserviceproto/protos/paymentservice2.proto
+// 所属仓库：any-sync
+// proto 包：（无）
+// 服务：AnyPaymentProcessingV2
+// RPC 数量：8
+// 说明：由 scripts/translate-proto.py 生成；字段名、编号、类型保持原样，注释译为中文。
+// ============================================================
+
+syntax = "proto3";
+option go_package = "paymentservice/paymentserviceproto";
+
+message MembershipV2 {
+  enum PaymentProvider {
+    None = 0;
+    Stripe = 1;
+    Crypto = 2;
+    BillingPortal = 3;
+    AppStore = 4;
+    GooglePlay = 5;
+  }
+
+  enum Period {
+    Unlimited = 0 [deprecated = true];
+    Monthly = 1;
+    Yearly = 2;
+    ThreeYears = 3;
+    Lifetime = 4;
+  }
+
+  enum Platform {
+    Unknown = 0;
+    Desktop = 1;
+    MobileIOS = 2;
+    MobileAndroid = 3;
+    Web = 4;
+  }
+
+  message Amount {
+    string currency = 1;
+// 【原文】$0.01 = 1
+// 【原文】$1.00 = 100
+// 【原文】negative amounts
+    int64 amountCents = 2;
+  }
+
+  message Features {
+    uint64 storageBytes = 1;
+    uint32 spaceReaders = 2;
+    uint32 spaceWriters = 3;
+    uint32 sharedSpaces = 4;
+    uint32 teamSeats = 5;
+    uint32 anyNameCount = 6;
+    uint32 anyNameMinLen = 7; 
+  }
+
+  message Product {
+// 该 是 a unique Payment 节点 ID
+// adding 2 相同 products 到 a cart means we 将 have 2 items 带有 相同 ID
+    string id = 1;
+    string name = 2;
+    string description = 3;
+    bool isTopLevel = 4;
+    bool isHidden = 5;
+
+// isIntro flag 可 被 使用 as follows:
+//
+// 1. 如果 当前 user's top level product has isIntro flag ->
+// then you'd rather show a FULL 列表 的 所有 products
+// 到 enable upgrading 来自 当前 product
+// 2. but 如果 当前 user's top level product has 无 isIntro flag ->
+// then it means ， 该 plan 曾是 aquired and 用户 need 到 control it.
+// then show "second screen" 到 control ， product instead
+    bool isIntro = 6;
+    
+// isUpgradeable 可 被 使用 as follows:
+//
+// 如果 当前 user's top level product has isUpgradeable flag ->
+// show incentives 到 buy something else
+    bool isUpgradeable = 7;
+
+    repeated Amount pricesYearly = 8;
+    repeated Amount pricesMonthly = 9;
+// 【原文】green, blue, red, purple, custom, etc
+    string colorStr = 10;
+    string offer = 11;
+    Features features = 12;
+    repeated Amount pricesLifetime = 13;
+  }
+
+  message PurchaseInfo {
+    uint64 dateStarted = 1;
+    uint64 dateEnds = 2;
+    bool isAutoRenew = 3;
+    Period period = 4;
+// 0 = 不 在 a trial. 否则 Unix 时间戳 when free trial ends,
+// 其 是 also when 第一个 real invoice 是 charged.
+    uint64 dateTrialEnds = 5;
+  }
+
+  message ProductStatus {
+    enum Status {
+      StatusUnknown = 0;
+      StatusPending = 1;
+      StatusActive = 2;
+      StatusPendingRequiresFinalization = 3;
+    }
+    Status status = 1;
+  }
+
+  message PurchasedProduct {
+    Product product = 1;
+    PurchaseInfo purchaseInfo = 2;
+    ProductStatus productStatus = 3;
+  }
+
+  message CartProduct {
+    Product product = 1;    
+// 否则 - monthly or isLifetime
+    bool isYearly = 2;
+// set 到 是 如果 you want 到 remove 该 item 来自 customer
+// it's like setting -1 到 some product
+    bool remove = 3;
+// 如果 是 - then 该 是 lifetime product (无 matter what isYearly above 是)
+// unfortunately we do 不 use Period here 到 keep compatibility 带有 旧 versions
+// 【原文】that still use isYearly!
+    bool isLifetime = 4;
+  }
+
+  message Invoice {
+    enum Status {
+      Unpaid = 0;
+      Paid = 1;
+    }
+    
+    string id = 1;
+    uint64 date = 2;
+    Amount total = 3;
+    Status status = 4;
+// Stripe hosted-invoice payment page 用于 an OPEN (unpaid) invoice 用户
+// 必须 pay 到 keep access — set during reverse-trial grace period.
+// 空 when 无 action 是 必需.
+    string paymentUrl = 5;
+// Stripe billing_reason 的 OPEN invoice 该 记录 describes, verbatim
+// (e.g. "subscription_cycle" 用于 第一个 post-trial invoice,
+// "subscription_update"/"subscription_threshold" 用于 later renewal dunning).
+// Lets a consumer tell a trial-ended grace invoice 来自 a failed-renewal one
+// exactly, instead 的 inferring it 来自 period math. 空 when unknown.
+    string billingReason = 6;
+  }
+
+  message Cart {
+// 如果 you add Nx 相同 product - it 将 被 Nx 在 'products' array, i.e:
+// 每个 product instance has a unique 索引
+    repeated CartProduct products = 1;
+// total amount 的 cart (including discounts, etc)
+    Amount total = 2;
+
+// 在 case you 是 paying 在 middle 的 period (用于 existing customers)
+// 下一个 invoice amount 将 also 被 generated
+    Amount totalNextInvoice = 3;
+    uint64 nextInvoiceDate = 4;
+    repeated string appliedPromocodes = 5;
+  }
+
+  message CryptoCheckout {
+    string invoiceURL = 1;
+    Amount total = 2;
+    bool isCanCancel = 3;
+  }
+
+  message GetProductsRequest {
+
+  }
+
+  message GetProductsResponse {
+    repeated Product products = 1;
+  }
+
+  message GetStatusRequest {
+
+  }
+
+  message GetStatusResponse {
+    repeated MembershipV2.PurchasedProduct products = 1;
+    MembershipV2.Invoice nextInvoice = 2;
+    string teamOwnerID = 3;
+    MembershipV2.PaymentProvider paymentProvider = 4;
+    repeated string appliedPromocodes = 5;
+
+// 如果 crypto checkout 是 在 process
+    MembershipV2.CryptoCheckout cryptoCheckout = 6;
+  }
+
+  message StoreCartGetRequest {
+
+  }
+
+  message StoreCartGetResponse {
+    MembershipV2.Cart cart = 1;
+  }
+
+  message StoreCartPromocodeApplyRequest {
+    string promocode = 1;
+  }
+
+  message StoreCartCheckoutRequest {
+
+  }
+
+  message StoreCartCheckoutResponse {
+// 用于 新 customers - 将 contain a payment URL
+// (新 Stripe session)
+//
+// 如果 该 是 空 - then 该 是 existing customer
+// and we 是 trying 到 process payment
+    string paymentUrl = 1;
+  }
+
+  message StoreCartUpdateRequest {
+    repeated CartProduct products = 1;
+    string ownerEthAddress = 2;
+    repeated string promocodes = 3;
+  }
+
+  message StoreCartUpdateResponse {
+    MembershipV2.Cart cart = 1;
+  }
+
+  message StoreCartClearRequest {
+
+  }
+
+  message WebAuthRequest {
+    
+  }
+
+  message WebAuthResponse {
+    string jwt = 1;
+
+// (可选) redirect here after auth
+    string url = 2;
+  }
+
+  message AnyNameIsValidRequest {
+    string requestedAnyName = 1;
+  }
+
+  message AnyNameIsValidResponse {
+    Code code = 1;
+    string description = 2;
+
+    enum Code {
+        Valid = 0;
+        NoDotAny = 1;
+        TooShort = 2;
+        TooLong = 3;
+        HasInvalidChars = 4;
+        AccountHasNoName = 5;
+        CanNotReserve = 6;
+// 如果 everything 是 fine - "name 是 already taken" check 应当 被 done 在 NS
+// 【原文】see IsNameAvailable()
+    }
+  }
+
+  message AnyNameAllocateRequest {
+    string requestedAnyName = 1;
+
+// 该 是 owner's main EOA (Externally Owned 账户) address
+// 不 AccountAbstraction's SCW (Smart Contract Wallet) address!
+// 该 是 必需 到 reserve a name 用于 owner (later ， 是 done by 用户)
+// 在 following format: "0x7a250d5630b4cf539739df2c5dacb4c659f2488d"
+    string ownerEthAddress = 2;
+  }
+
+  message AnyNameAllocateResponse {
+    
+  }
+
+  message SubscribeToUpdatesRequest {
+    string email = 1;
+    Platform platform = 2;
+// 如果 否 - unsubscribe
+    bool subscribe = 3;
+// 【原文】additional data
+    string context = 4;
+  }
+
+  message SubscribeToUpdatesResponse {
+
+  }
+}
+
+service AnyPaymentProcessingV2 {
+  rpc SubscribeToUpdates(MembershipV2.SubscribeToUpdatesRequest) returns (MembershipV2.SubscribeToUpdatesResponse);
+
+  rpc GetProducts (MembershipV2.GetProductsRequest) returns (MembershipV2.GetProductsResponse);
+  rpc GetStatus (MembershipV2.GetStatusRequest) returns (MembershipV2.GetStatusResponse);
+  rpc WebAuth(MembershipV2.WebAuthRequest) returns (MembershipV2.WebAuthResponse); 
+
+  rpc AnyNameIsValid(MembershipV2.AnyNameIsValidRequest) returns (MembershipV2.AnyNameIsValidResponse);
+  rpc AnyNameAllocate(MembershipV2.AnyNameAllocateRequest) returns (MembershipV2.AnyNameAllocateResponse);
+
+  rpc StoreCartGet(MembershipV2.StoreCartGetRequest) returns (MembershipV2.StoreCartGetResponse);
+  rpc StoreCartUpdate(MembershipV2.StoreCartUpdateRequest) returns (MembershipV2.StoreCartUpdateResponse);
+}

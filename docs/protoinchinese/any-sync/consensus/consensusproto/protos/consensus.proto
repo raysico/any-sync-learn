@@ -1,0 +1,177 @@
+// ============================================================
+// 源文件：src/any-sync/consensus/consensusproto/protos/consensus.proto
+// 所属仓库：any-sync ｜ proto 包：consensusProto ｜ 错误码区间：500–599
+// ============================================================
+
+syntax = "proto3";
+package consensusProto;
+
+option go_package = "consensus/consensusproto";
+
+// 错误码（区间 500–599）
+enum ErrCodes {
+    // 未知 / 兜底
+    Unexpected = 0;
+    // 日志已存在
+    LogExists = 1;
+    // 日志不存在
+    LogNotFound = 2;
+    // 记录冲突
+    RecordConflict = 3;
+    // 禁止操作
+    Forbidden = 4;
+    // 载荷无效
+    InvalidPayload = 5;
+    // 错误码区间基准
+    ErrorOffset = 500;
+}
+
+
+// Log 是一份共识日志（成员与权限变更的有序记录）
+message Log {
+    // 日志 ID（通常是空间 ID）
+    string id = 1;
+    // 记录列表（严格有序）
+    repeated RawRecordWithId records = 3;
+}
+
+// RawRecord 包含载荷、提交者签名，以及接受者（共识节点）的签名
+message RawRecord {
+    // 记录载荷
+    bytes payload = 1;
+    // 提交该记录账户的签名
+    bytes signature = 2;
+    // 接受者（共识节点）身份
+    bytes acceptorIdentity = 3;
+    // 接受者签名
+    bytes acceptorSignature = 4;
+    // 接受时间戳
+    int64 acceptorTimestamp = 5;
+}
+
+// RawRecordWithId 是带 ID 的原始记录（便于引用）
+message RawRecordWithId {
+    // 记录载荷
+    bytes payload = 1;
+    // 记录 ID
+    string id = 2;
+}
+
+// Record 是承载数据的记录（日志的内部结构）
+message Record {
+    // 前一条记录 ID（形成链）
+    string prevId = 1;
+    // 记录创建者身份
+    bytes identity = 2;
+    // 数据载荷
+    bytes data = 3;
+    // 创建时间戳
+    int64 timestamp = 4;
+}
+
+
+// 共识服务：由共识节点校验 ACL 变更的唯一真相源
+service Consensus {
+    // LogAdd：新建一份日志
+    rpc LogAdd(LogAddRequest) returns (Ok);
+    // RecordAdd：向日志追加记录
+    rpc RecordAdd(RecordAddRequest) returns (RawRecordWithId);
+    // LogWatch：拉取日志并订阅其变化（双向流）
+    rpc LogWatch(stream LogWatchRequest) returns (stream LogWatchEvent);
+    // LogDelete：删除整份日志
+    rpc LogDelete(LogDeleteRequest) returns (Ok);
+}
+
+// Ok 是空成功响应
+message Ok {}
+
+// LogAddRequest 新建日志的请求
+message LogAddRequest {
+    // 日志 ID
+    string logId = 1;
+    // 日志中的第一条记录；共识节点不对它签名
+    RawRecordWithId record = 2;
+}
+
+// RecordAddRequest 追加记录的请求
+message RecordAddRequest {
+    // 日志 ID
+    string logId = 1;
+    // 待追加的记录
+    RawRecord record = 2;
+}
+
+// LogWatchRequest 订阅/退订日志的请求
+message LogWatchRequest {
+    // 要订阅的日志 ID
+    repeated string watchIds = 1;
+    // 要退订的日志 ID
+    repeated string unwatchIds = 2;
+}
+
+// LogWatchEvent 是日志变化事件
+message LogWatchEvent {
+    // 日志 ID
+    string logId = 1;
+    // 新增记录
+    repeated RawRecordWithId records = 2;
+    // 错误（如有）
+    Err error = 3;
+}
+
+// LogDeleteRequest 删除日志的请求
+message LogDeleteRequest {
+    // 日志 ID
+    string logId = 1;
+}
+
+// Err 是错误载体
+message Err {
+    ErrCodes error = 1;
+}
+
+// LogSyncContentValue 提供日志同步的不同消息类型
+message LogSyncContentValue {
+    oneof value {
+        // 头节点更新
+        LogHeadUpdate headUpdate = 1;
+        // 全量同步请求
+        LogFullSyncRequest fullSyncRequest = 2;
+        // 全量同步响应
+        LogFullSyncResponse fullSyncResponse = 3;
+    }
+}
+
+// LogSyncMessage 是日志同步时发送的消息
+message LogSyncMessage {
+    // 日志 ID
+    string id = 1;
+    // 载荷
+    bytes payload = 2;
+    // 同步内容
+    LogSyncContentValue content = 3;
+}
+
+// LogHeadUpdate 是日志头节点更新消息
+message LogHeadUpdate {
+    // 当前头记录 ID
+    string head = 1;
+    // 随更新携带的记录
+    repeated RawRecordWithId records = 2;
+}
+
+// LogFullSyncRequest 是日志全量同步请求
+message LogFullSyncRequest {
+    // 请求方已知的头记录 ID
+    string head = 1;
+    // 请求方已知的记录
+    repeated RawRecordWithId records = 2;
+}
+
+// LogFullSyncResponse 是日志全量同步响应
+message LogFullSyncResponse {
+    // 对端当前头记录 ID
+    string head = 1;
+    // 完整记录列表
+    repeated RawRecordWithId records = 2;
+}

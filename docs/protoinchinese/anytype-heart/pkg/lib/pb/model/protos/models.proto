@@ -1,0 +1,1869 @@
+// ============================================================
+// 源文件：src/pkg/lib/pb/model/protos/models.proto
+// 所属仓库：anytype-heart
+// proto 包：anytype.model
+// 服务：（无 service，仅 message 定义）
+// RPC 数量：0
+// 说明：由 scripts/translate-proto.py 生成；字段名、编号、类型保持原样，注释译为中文。
+// ============================================================
+
+syntax = "proto3";
+package anytype.model;
+option go_package = "pkg/lib/pb/model";
+
+import "google/protobuf/struct.proto";
+import "pkg/lib/pb/model/protos/export_report.proto";
+
+message SmartBlockSnapshotBase {
+    repeated Block blocks = 1;
+    google.protobuf.Struct details = 2;
+    google.protobuf.Struct fileKeys = 3 [deprecated=true];
+    repeated Relation extraRelations = 4 [deprecated=true];
+    repeated string objectTypes = 5;
+    google.protobuf.Struct collections = 6;
+    repeated string removedCollectionKeys = 8;
+    repeated RelationLink relationLinks = 7;
+    string key = 9; // 仅 使用 用于 pb backup purposes, ignored 在 other cases
+    int64 originalCreatedTimestamp = 10; // ignored 在 import/export 在 favor 的 createdDate relation. 使用 到 存储 original user-side 对象 creation 时间戳
+    FileInfo fileInfo = 11;
+}
+
+enum SmartBlockType {
+    AccountOld = 0; // 已废弃
+
+    Page = 0x10;
+    ProfilePage = 0x11;
+    Home = 0x20;
+    Archive = 0x30;
+    Widget = 0x70;
+
+    File = 0x100;
+
+    Template = 0x120;
+    BundledTemplate = 0x121;
+
+    BundledRelation = 0x200; // 已废弃
+    SubObject = 0x201;
+    BundledObjectType = 0x202;    // 已废弃
+    AnytypeProfile = 0x203;
+    Date = 0x204;
+    Workspace = 0x206;
+    STRelation = 0x209;
+    STType = 0x210;
+    STRelationOption = 0x211;
+    SpaceView = 0x212;
+
+    Identity = 0x214;
+    Participant = 0x216;
+    MissingObject = 0x207;
+
+    FileObject = 0x215;
+
+    NotificationObject = 0x217;
+    DevicesObject = 0x218;
+    ChatObjectDeprecated = 0x219; // 已废弃 Container 用于 any-store based chats
+    ChatDerivedObject = 0x220; // Any-store based 对象 用于 chat
+    AccountObject = 0x221; // Container 用于 账户 data 在 tech 空间
+    DiscussionObject = 0x222; // Any-store based 对象 用于 discussion
+    TechSpaceObject = 0x223; // Any-store based 对象 在 tech 空间 用于 cross-device sync
+    TechSpaceVirtualObject = 0x224; // Per-space virtual 对象 backed by a tech 空间 CRDT 文档
+}
+
+message Search {
+    message Result {
+        string objectId = 1;
+        google.protobuf.Struct details = 2; //
+
+        repeated Meta meta = 3; // 【原文】meta information about the search result
+    }
+
+    message Meta {
+        string highlight = 1; // truncated text 带有 highlights
+        repeated Range highlightRanges = 2; // ranges 的 highlight 在 text (using utf-16 runes)
+        string blockId = 3; // 【原文】block id where the highlight has been found
+        string relationKey = 4; // relation 密钥 的 block where highlight has been found
+        google.protobuf.Struct relationDetails = 5; // contains details 用于 dependent 对象. E.g. relation option or 类型. 待办: rename 到 dependantDetails
+    }
+
+    message Message {
+        message Sort {
+            Key key = 1;
+            Type type = 2;
+
+            enum Key {
+                ORDER_ID = 0;
+                SCORE = 1;
+                CREATED_AT = 2;
+                MODIFIED_AT = 3;
+            }
+
+            enum Type {
+                Asc = 0;
+                Desc = 1;
+            }
+        }
+
+        message Result {
+            string chatId = 1;
+            string messageId = 2;
+            int64 score = 3;
+            string highlight = 4; // truncated text 带有 highlights
+            repeated Range highlightRanges = 5; // ranges 的 highlight 在 text (using utf-16 runes)
+            ChatMessage message = 6;
+            string spaceId = 7; // 空间 chat belongs 到; set 在 所有 search scopes
+        }
+    }
+
+}
+
+message Block {
+    string id = 1;
+    google.protobuf.Struct fields = 2;
+    Restrictions restrictions = 3;
+    repeated string childrenIds = 4;
+    string backgroundColor = 5;
+    Align align = 6;
+    VerticalAlign verticalAlign = 7;
+
+    oneof content {
+        Content.Smartblock smartblock = 11;
+
+        Content.Text text = 14;
+        Content.File file = 15;
+        Content.Layout layout = 16;
+        Content.Div div = 17;
+        Content.Bookmark bookmark = 18;
+        Content.Icon icon = 19;
+        Content.Link link = 20;
+        Content.Dataview dataview = 21;
+        Content.Relation relation = 22;
+        Content.FeaturedRelations featuredRelations = 23;
+        Content.Latex latex = 24;
+        Content.TableOfContents tableOfContents = 25;
+        Content.Table table = 26;
+        Content.TableColumn tableColumn = 27;
+        Content.TableRow tableRow = 28;
+        Content.Widget widget = 29;
+        Content.Chat chat = 30;
+    }
+
+    message Restrictions {
+        bool read = 1;
+        bool edit = 2;
+        bool remove = 3;
+        bool drag = 4;
+        bool dropOn = 5;
+    }
+
+    enum Position {
+        None = 0;
+// 【原文】above target block
+        Top = 1;
+// 【原文】under target block
+        Bottom = 2;
+// 到 left 的 target block
+        Left = 3;
+// 到 right 的 target block
+        Right = 4;
+// inside target block, as 最后一个 block
+        Inner = 5;
+// 【原文】replace target block
+        Replace = 6;
+// inside target block, as 第一个 block
+        InnerFirst = 7;
+    }
+
+    enum Align {
+        AlignLeft = 0;
+        AlignCenter = 1;
+        AlignRight = 2;
+        AlignJustify = 3;
+    }
+
+    enum VerticalAlign {
+        VerticalAlignTop = 0;
+        VerticalAlignMiddle = 1;
+        VerticalAlignBottom = 2;
+    }
+
+    message Content {
+        /*
+        * Layout have 无 visual representation, but affects 在 blocks, ， it contains.
+        * Row/Column layout blocks creates 仅 automatically, after some 的 a D&D operations, 用于 example
+        */
+        message Layout {
+            Style style = 1;
+
+            enum Style {
+                Row = 0;
+                Column = 1;
+                Div = 2;
+                Header = 3;
+                TableRows = 4;
+                TableColumns = 5;
+            }
+        }
+
+        /*
+        * Link: block 到 link some content 来自 an external sources.
+        */
+        message Link {
+            string targetBlockId = 1; // ID 的 target block
+            Style style = 2; // 已废弃
+            google.protobuf.Struct fields = 3;
+            IconSize iconSize = 4;
+            CardStyle cardStyle = 5;
+            Description description = 6;
+            repeated string relations = 7;
+
+            enum IconSize {
+                SizeNone = 0;
+                SizeSmall = 1;
+                SizeMedium = 2;
+            }
+
+            enum Style {
+                Page = 0;
+                Dataview = 1;
+                Dashboard = 2;
+                Archive = 3;
+// 【原文】...
+            }
+
+            enum Description {
+                None = 0;
+                Added = 1;
+                Content = 2;
+            }
+
+            enum CardStyle {
+                Text = 0;
+                Card = 1;
+                Inline = 2;
+            }
+        }
+
+        /*
+        * Divider: block, ， contains 仅 one horizontal thin line
+        */
+        message Div {
+            Style style = 1;
+
+            enum Style {
+                Line = 0;
+                Dots = 1;
+            }
+        }
+
+        /*
+        * Bookmark 是 到 keep a web-link and 到 preview a content.
+        */
+        message Bookmark {
+            string url = 1;
+// 已废弃. Get 该 data 来自 target 对象.
+            string title = 2;
+// 已废弃. Get 该 data 来自 target 对象.
+            string description = 3;
+// 已废弃. Get 该 data 来自 target 对象.
+            string imageHash = 4;
+// 已废弃. Get 该 data 来自 target 对象.
+            string faviconHash = 5;
+
+            LinkPreview.Type type = 6;
+            string targetObjectId = 7;
+
+            State state = 8;
+
+            enum State {
+                Empty = 0;
+                Fetching = 1;
+                Done = 2;
+                Error = 3;
+            }
+        }
+
+        message Icon {
+            string name = 1;
+        }
+
+        message FeaturedRelations {
+        }
+
+        message Text {
+            string text = 1;
+            Style style = 2;
+            Marks marks = 3; // 列表 的 marks 到 apply 到 text
+            bool checked = 4;
+            string color = 5;
+            string iconEmoji = 6; // 使用 带有 style Callout
+            string iconImage = 7; // 在 case both image and emoji 是 set, image 应当 has a priority 在 UI
+
+            message Marks {
+                repeated Mark marks = 1;
+            }
+
+            message Mark {
+                Range range = 1; // range 的 symbols 到 apply 该 mark. 来自(symbol) 到(symbol)
+                Type type = 2;
+                string param = 3; // 【原文】link, color, etc
+
+                enum Type {
+                    Strikethrough = 0;
+                    Keyboard = 1;
+                    Italic = 2;
+                    Bold = 3;
+                    Underscored = 4;
+                    Link = 5;
+                    TextColor = 6;
+                    BackgroundColor = 7;
+                    Mention = 8;
+                    Emoji = 9;
+                    Object = 10;
+                }
+            }
+
+            enum Style {
+                Paragraph = 0;
+                Header1 = 1;
+                Header2 = 2;
+                Header3 = 3;
+                Header4 = 4; // 已废弃
+                Quote = 5;
+                Code = 6;
+                Title = 7; // currently 仅 one block 的 该 style 可 exists 在 a page
+                Checkbox = 8;
+                Marked = 9;
+                Numbered = 10;
+                Toggle = 11;
+                Description = 12; // currently 仅 one block 的 该 style 可 exists 在 a page
+                Callout = 13;
+                ToggleHeader1 = 14;
+                ToggleHeader2 = 15;
+                ToggleHeader3 = 16;
+            }
+        }
+
+        message File {
+            string hash = 1;
+            string name = 2;
+            Type type = 3;
+            string mime = 4;
+            int64 size = 5;
+            int64 addedAt = 6;
+            string targetObjectId = 9;
+
+            State state = 7;
+            Style style = 8;
+
+            enum Type {
+                None = 0;
+                File = 1;
+                Image = 2;
+                Video = 3;
+                Audio = 4;
+                PDF = 5;
+            }
+
+            enum Style {
+                Auto = 0; // 所有 类型 expect 文件 and None has Embed style by 默认
+                Link = 1;
+                Embed = 2;
+            }
+
+            enum State {
+                Empty = 0; // There 是 无 文件 and preview, it's an 空 block, ， waits 文件.
+                Uploading = 1; // There 是 still 无 文件/preview, but 文件 already uploading
+                Done = 2; // 文件 and preview downloaded
+                Error = 3; // 错误 while uploading
+            }
+        }
+
+        message Smartblock {
+        }
+
+        message Dataview {
+            repeated string source = 1; // 可 被 set 用于 detached(without TargetObjectId) inline sets
+            repeated View views = 2;
+            string activeView = 3; // do 不 generate changes 用于 该 字段
+// 已废弃
+            repeated model.Relation relations = 4;
+            repeated GroupOrder groupOrders = 12;
+            repeated ObjectOrder objectOrders = 13;
+            repeated anytype.model.RelationLink relationLinks = 5;
+            string TargetObjectId = 6; // 空 用于 original set/collection 对象 and 用于 detached inline sets
+            bool isCollection = 14;
+
+            message View {
+                string id = 1;
+                Type type = 2;
+                string name = 3;
+                repeated Sort sorts = 4;
+                repeated Filter filters = 5;
+                repeated Relation relations = 6; // relations fields/columns options, also 使用 到 provide order
+                string coverRelationKey = 7; // Relation 使用 用于 cover 在 gallery
+                bool hideIcon = 8; // 【原文】Hide icon near name
+                Size cardSize = 9; // Gallery card 大小
+                bool coverFit = 10; // 【原文】Image fits container
+                string groupRelationKey = 11; // Group view by 该 relationKey
+                bool groupBackgroundColors = 12; // Enable backgrounds 在 groups
+                int32 pageLimit = 13; // 限制 的 对象 shown 在 widget
+                string defaultTemplateId = 14; // 默认 template ， 是 chosen 用于 新 对象 created within view
+                string defaultObjectTypeId = 15; // 默认 对象 类型 ， 是 chosen 用于 新 对象 created within view
+                string endRelationKey = 16; // Group view by 该 relationKey
+                bool wrapContent = 17; // Wrap content 在 view
+                ListSize listSize = 18; // 列表 view 大小 setting
+                bool alternateRows = 19; // Alternate row background colors 在 grid view
+
+                enum Type {
+                    Table = 0;
+                    List = 1;
+                    Gallery = 2;
+                    Kanban = 3;
+                    Calendar = 4;
+                    Graph = 5;
+                }
+
+                enum Size {
+                    Small = 0;
+                    Medium = 1;
+                    Large = 2;
+                }
+
+                enum ListSize {
+                    Compact = 0;  // Single-line display (默认)
+                    Regular = 1;  // Two-line display 带有 description
+                }
+            }
+
+            message Relation {
+                string key = 1;
+                bool isVisible = 2;
+                int32 width = 3; // displayed column % calculated based 在 other visible relations
+// bool isReadOnly = 4; // 已废弃
+                bool dateIncludeTime = 5; // 已废弃
+                TimeFormat timeFormat = 6; // 已废弃
+                DateFormat dateFormat = 7; // 已废弃
+                FormulaType formula = 8;
+                Block.Align align = 9;
+
+                enum DateFormat {
+                    MonthAbbrBeforeDay = 0; // 【原文】Jul 30, 2020
+                    MonthAbbrAfterDay = 1; // 【原文】30 Jul 2020
+                    Short = 2; // 【原文】30/07/2020
+                    ShortUS = 3; // 【原文】07/30/2020
+                    ISO = 4; // 【原文】2020-07-30
+                }
+
+                enum TimeFormat {
+                    Format12 = 0;
+                    Format24 = 1;
+                }
+
+                enum FormulaType {
+                    None				    = 0;
+                    Count				    = 1;
+                    CountValue      = 2;
+                    CountDistinct		= 3;
+                    CountEmpty			= 4;
+                    CountNotEmpty		= 5;
+                    PercentEmpty		= 6;
+                    PercentNotEmpty	= 7;
+                    MathSum				  = 8;
+                    MathAverage			= 9;
+                    MathMedian			= 10;
+                    MathMin				  = 11;
+                    MathMax				  = 12;
+                    Range				    = 13;
+                }
+            }
+
+            message Sort {
+                string RelationKey = 1;
+                Type type = 2;
+                repeated google.protobuf.Value customOrder = 3;
+                RelationFormat format = 4;
+                bool includeTime = 5;
+                string id = 6;
+                EmptyType emptyPlacement = 7;
+                bool noCollate = 8;
+
+                enum Type {
+                    Asc = 0;
+                    Desc = 1;
+                    Custom = 2;
+                }
+
+                enum EmptyType {
+                    NotSpecified = 0;
+                    Start = 1;
+                    End = 2;
+                }
+            }
+
+            message Filter {
+                string id = 9;
+                Operator operator = 1; // looks 不 applicable?
+                string RelationKey = 2;
+                string relationProperty = 5;
+                Condition condition = 3;
+                google.protobuf.Value value = 4;
+                QuickOption quickOption = 6;
+                RelationFormat format = 7;
+                bool includeTime = 8;
+                repeated Filter nestedFilters = 10;
+
+                enum Operator {
+                    No = 0;
+                    Or = 1;
+                    And = 2;
+                }
+
+                enum Condition {
+                    None = 0;
+                    Equal = 1;
+                    NotEqual = 2;
+                    Greater = 3;
+                    Less = 4;
+                    GreaterOrEqual = 5;
+                    LessOrEqual = 6;
+                    Like = 7;
+                    NotLike = 8;
+                    In = 9; // "at least one value(来自 provided 列表) 是 在"
+                    NotIn = 10; // "none 的 provided values 是 在"
+                    Empty = 11;
+                    NotEmpty = 12;
+                    AllIn = 13;
+                    NotAllIn = 14;
+                    ExactIn = 15;
+                    NotExactIn = 16;
+                    Exists = 17;
+                }
+
+                enum QuickOption {
+                    ExactDate = 0;
+                    Yesterday = 1;
+                    Today = 2;
+                    Tomorrow = 3;
+                    LastWeek = 4;
+                    CurrentWeek = 5;
+                    NextWeek = 6;
+                    LastMonth = 7;
+                    CurrentMonth = 8;
+                    NextMonth = 9;
+                    NumberOfDaysAgo = 10;
+                    NumberOfDaysNow = 11;
+                    LastYear = 12;
+                    CurrentYear = 13;
+                    NextYear = 14;
+                }
+            }
+
+            message GroupOrder {
+                string viewId = 1;
+                repeated ViewGroup viewGroups = 2;
+            }
+
+            message ViewGroup {
+                string groupId = 1;
+                int32 index = 2;
+                bool hidden = 3;
+                string backgroundColor = 4;
+            }
+
+            message ObjectOrder {
+                string viewId = 1;
+                string groupId = 2;
+                repeated string objectIds = 3;
+            }
+
+            message Group {
+                string id = 1;
+                oneof Value {
+                    Status status = 2;
+                    Tag tag = 3;
+                    Checkbox checkbox = 4;
+                    Date date = 5;
+                }
+            }
+
+            message Status {
+                string id = 1;
+            }
+
+            message Tag {
+                repeated string ids = 1;
+            }
+
+            message Checkbox {
+                bool checked = 1;
+            }
+
+            message Date {
+            }
+        }
+
+        message Relation {
+            string key = 1;
+        }
+
+        message Latex {
+            string text = 1;
+            Processor processor = 2;
+
+            enum Processor {
+                Latex = 0;
+                Mermaid = 1;
+                Chart = 2;
+                Youtube = 3;
+                Vimeo = 4;
+                Soundcloud = 5;
+                GoogleMaps = 6;
+                Miro = 7;
+                Figma = 8;
+                Twitter = 9;
+                OpenStreetMap = 10;
+                Reddit = 11;
+                Facebook = 12;
+                Instagram = 13;
+                Telegram = 14;
+                GithubGist = 15;
+                Codepen = 16;
+                Bilibili = 17;
+                Excalidraw = 18;
+                Kroki = 19;
+                Graphviz = 20;
+                Sketchfab = 21;
+                Image = 22;
+                Drawio = 23;
+                Spotify = 24;
+            }
+        }
+
+        message TableOfContents {
+        }
+
+        message Table {}
+        message TableColumn {}
+        message TableRow {
+            bool isHeader = 1;
+        }
+
+        message Widget {
+            Layout layout = 1;
+            int32 limit = 2;
+            string viewId = 3;
+            bool autoAdded = 4;
+
+            enum Layout {
+                Link = 0;
+                Tree = 1;
+                List = 2;
+                CompactList = 3;
+                View = 4;
+            }
+        }
+        message Chat {
+
+        }
+    }
+}
+
+/*
+* 使用 到 decode block meta 仅, without content itself
+*/
+message BlockMetaOnly {
+    string id = 1;
+    google.protobuf.Struct fields = 2;
+}
+
+/*
+* General purpose structure, uses 在 Mark.
+*/
+message Range {
+    int32 from = 1;
+    int32 to = 2;
+}
+
+/**
+* Contains basic information about a 用户 账户
+*/
+message Account {
+    string id = 1; // 【原文】User's thread id
+    Config config = 4;
+    Status status = 5;
+    Info info = 6;
+
+    message Config {
+        bool enableDataview = 1;
+        bool enableDebug = 2;
+        bool enablePrereleaseChannel = 3;
+        bool enableSpaces = 4;
+
+        google.protobuf.Struct extra = 100;
+    }
+
+    message Status {
+        StatusType statusType = 1;
+        int64 deletionDate = 2;
+    }
+
+    enum StatusType {
+        Active = 0;
+        PendingDeletion = 1;
+        StartedDeletion = 2;
+        Deleted = 3;
+    }
+
+    message Info {
+        string homeObjectId = 2; // 【原文】home dashboard block id
+        string archiveObjectId = 3; // 【原文】archive block id
+        string profileObjectId = 4; // 【原文】profile block id
+        string marketplaceWorkspaceId = 11; // 【原文】marketplace workspace id
+        string workspaceObjectId = 15; // workspace 对象 ID. 使用 用于 space-level chat
+        string spaceChatId = 16; // space-level chat 如果 exists
+
+        string deviceId = 8;
+        string accountSpaceId = 9; // 第一个 created 私有 空间. It's filled 仅 when 账户 是 created
+        string widgetsId = 10;
+        string spaceViewId = 13;
+        string techSpaceId = 14;
+
+        string gatewayUrl = 101; // gateway url 用于 fetching static 文件
+        string localStoragePath = 103; // path 到 local storage
+        string timeZone = 104; // 时间 zone 来自 config
+        string analyticsId = 105;
+        string networkId = 106; // network ID 到 其 anytype 是 connected
+        string ethereumAddress = 107; // we have 任意 PK AND Ethereum PK derived 来自 one 随机种子（使根变更唯一） phrase
+        string metaDataKey = 108; // symmetric 密钥 用于 encrypting profile metadata
+    }
+
+    message Auth {
+        message AppInfo {
+            string appHash = 1;
+            string appName = 2; // either 来自 process or specified manually when creating
+            string appKey = 4;
+            int64 createdAt = 5;
+            int64 expireAt = 6; // unix 时间戳 在 seconds after 其 密钥 stops authenticating; 0 means 密钥 never expires
+            LocalApiScope scope = 7;
+            bool isActive = 8;
+            AppGrant grant = 9; // unset means an unscoped (legacy) 密钥; 仅 JsonAPI-scope 密钥 可能 carry one
+        }
+        enum LocalApiScope {
+            Limited = 0; // 使用 在 WebClipper; AccountSelect(到 被 已废弃), ObjectSearch, ObjectShow, ObjectCreate, ObjectCreateFromURL, BlockPreview, BlockPaste, BroadcastPayloadEvent
+            JsonAPI = 1; // JSON API 仅, 无 direct grpc api calls allowed
+            Full = 2; // Full access, 不 available via LocalLink
+        }
+        message AppGrant {
+// spaceIds 是 空间 密钥 可能 touch; 空 仅 when
+// allSpaces 是 set — exactly one 的 two 必须 被 present
+            repeated string spaceIds = 1;
+            Perm perm = 2;
+// allSpaces grants every 空间 在 账户, including 空间
+// created after grant 曾是 made (dynamic — GitHub's "所有
+// 【原文】repositories" semantics). The JSON API still excludes the tech
+// 空间; reaching it requires listing it explicitly 在 spaceIds.
+            bool allSpaces = 3;
+// Perm 是 nested so 其 Go constants (AccountAuthAppGrant_Read) 可
+// never 被 misread as 密钥 scopes (AccountAuth_JsonAPI et al.) —
+// grant verbs and 密钥 scopes 是 unrelated enums about different
+// 【原文】authorization layers.
+            enum Perm {
+                Read = 0; // zero value 是 narrowest permission, so an unset perm never widens
+                ReadWrite = 1;
+            }
+        }
+    }
+
+}
+
+message LinkPreview {
+    string url = 1;
+    string title = 2;
+    string description = 3;
+    string imageUrl = 4;
+    string faviconUrl = 5;
+    Type type = 6;
+
+    enum Type {
+        Unknown = 0;
+        Page = 1;
+        Image = 2;
+        Text = 3;
+    }
+}
+
+message Restrictions {
+    repeated ObjectRestriction object = 1;
+    repeated DataviewRestrictions dataview = 2;
+
+    enum ObjectRestriction {
+        None = 0;
+// 【原文】restricts delete
+        Delete = 1;
+// restricts work 带有 relations
+        Relations = 2;
+// restricts work 带有 blocks
+        Blocks = 3;
+// restricts work 带有 details
+        Details = 4;
+// restricts 类型 changing
+        TypeChange = 5;
+// 【原文】restricts layout changing
+        LayoutChange = 6;
+// restricts template creation 来自 该 对象
+        Template = 7;
+// restricts duplicate 对象
+        Duplicate = 8;
+// 可 被 set 仅 用于 类型. Restricts creating 对象 的 该 类型
+        CreateObjectOfThisType = 9;
+// 对象 是 不 allowed 到 publish
+        Publish = 10;
+    }
+
+
+    message DataviewRestrictions {
+        string blockId = 1;
+        repeated DataviewRestriction restrictions = 2;
+    }
+
+    enum DataviewRestriction {
+        DVNone = 0;
+        DVRelation = 1;
+        DVCreateObject = 2;
+        DVViews = 3;
+    }
+}
+
+message Object {
+    message ChangePayload {
+        SmartBlockType smartBlockType = 1;
+        string key = 2;
+        bytes data = 3;
+    }
+}
+
+message SpaceObjectHeader {
+    string spaceID = 1;
+}
+
+message ObjectType {
+    string url = 1; // leave 空 在 case you want 到 create 新 one
+    string name = 2; // name 的 objectType 在 singular form (可 被 localized 用于 bundled 类型)
+    repeated RelationLink relationLinks = 3; // cannot contain more than one Relation 带有 相同 RelationType
+    Layout layout = 4;
+    string iconEmoji = 5; // 【原文】emoji symbol
+    string description = 6;
+    bool hidden = 7;
+    bool readonly = 10;
+    repeated SmartBlockType types = 8;
+    bool isArchived = 9; // sets locally 到 hide 对象 类型 来自 set and some other places
+    bool installedByDefault = 11;
+    string key = 12; // name 的 objectType (可 被 localized 用于 bundled 类型)
+    int64 revision = 13; // revision 的 system objectType. 使用 到 check 如果 we 应当 change 类型 content or 不
+    bool restrictObjectCreation = 14; // restricts creating 对象 的 该 类型 用于 用户
+    int64 iconColor = 15; // color 的 对象 类型 icon
+    string iconName = 16; // name 的 对象 类型 icon
+    string pluralName = 17; // name 的 objectType 在 plural form (可 被 localized 用于 bundled 类型)
+
+    enum Layout {
+        basic = 0;
+        profile = 1;
+        todo = 2;
+        set = 3;
+        objectType = 4;
+        relation = 5;
+        file = 6;
+        dashboard = 7;
+        image = 8;
+        note = 9;
+        space = 10;
+        bookmark = 11;
+        relationOptionsList = 12;
+        relationOption = 13;
+        collection = 14;
+        audio = 15;
+        video = 16;
+        date = 17;
+        spaceView = 18;
+        participant = 19;
+
+        pdf = 20;
+        chatDeprecated = 21; // 已废弃
+        chatDerived = 22;
+        tag = 23;
+
+        notification = 24;
+        missingObject = 25;
+        devices = 26;
+        discussion = 27;
+    }
+}
+
+message Layout {
+    ObjectType.Layout id = 1;
+    string name = 2;
+    repeated Relation requiredRelations = 3; // relations 必需 用于 该 对象 类型
+}
+
+message RelationWithValue {
+    Relation relation = 1;
+    google.protobuf.Value value = 2;
+}
+
+// Relation describe human-interpreted relation 类型. It 可能 被 something like "Date 的 creation, format=date" or "Assignee, format=objectId, objectType=person"
+message Relation {
+    string id = 100;
+
+// 密钥 under 其 value 是 stored 在 map. 必须 被 unique 用于 对象 类型.
+// It usually auto-generated bsonid, but also 可能 被 something human-readable 在 case 的 prebuilt 类型.
+    string key = 1;
+
+    RelationFormat format = 2; // format 的 underlying data
+    string name = 3; // name 到 show (可 被 localized 用于 bundled 类型)
+    google.protobuf.Value defaultValue = 4;
+    DataSource dataSource = 5; // where data 是 stored
+
+    bool hidden = 6; // internal, 不 displayed 到 用户 (e.g. coverX, coverY)
+    bool readOnly = 7; // value 不 editable by 用户 tobe renamed 到 readonlyValue
+    bool readOnlyRelation = 15; // relation metadata, eg name and format 是 不 editable by 用户
+
+    bool multi = 8; // allow multiple values (stored 在 pb 列表)
+
+    repeated string objectTypes = 9; // URL 的 对象 类型, 空 到 allow link 到 任意 对象
+// 索引 10, 11 曾是 使用 在 internal-only builds. 可 被 reused, but 可能 break some test 账户
+    repeated Option selectDict = 12; // 默认 dictionary 带有 unique values 到 choose 用于 select/multiSelect format
+    int32 maxCount = 13; // max number 的 values 可 被 set 用于 该 relation. 0 means 无 限制. 1 means value 可 被 stored 在 non-repeated 字段
+    string description = 14;
+
+// on-store fields, injected 仅 locally
+    Scope scope = 20; // 已废弃, 到 被 removed
+    string creator = 21; // 【原文】creator profile id
+    int64 revision = 22; // revision 的 system relation. 使用 到 check 如果 we 应当 change relation content or 不
+    bool includeTime = 23; // indicates whether value 的 relation 带有 date format 应当 被 processed 带有 seconds precision
+
+    message Option {
+        string id = 1; // ID generated automatically 如果 omitted
+        string text = 2;
+        string color = 3; // 【原文】stored
+// 4 是 reserved 用于 旧 relation format
+        string relationKey = 5; // 【原文】stored
+        string orderId = 6; // lexicographic ID 的 relation option 用于 ordering
+    }
+
+    enum Scope {
+        object = 0; // stored within 对象
+        type = 1; // stored within 对象 类型
+        setOfTheSameType = 2; // aggregated 来自 dataview 的 sets 的 相同 对象 类型
+        objectsOfTheSameType = 3; // aggregated 来自 dataview 的 sets 的 相同 对象 类型
+        library = 4; // aggregated 来自 relations library
+    }
+
+    enum DataSource {
+        details = 0; // 默认, stored inside object's details
+        derived = 1; // stored locally, e.g. 在 badger or generated 在 fly
+        account = 2; // stored 在 账户 DB. means existing 仅 用于 specific anytype 账户
+        local = 3; // 【原文】stored locally
+    }
+}
+
+// RelationFormat describes how underlying data 是 stored 在 google.protobuf.Value and how it 应当 被 validated/sanitized
+enum RelationFormat {
+    longtext = 0; // 【原文】string
+    shorttext = 1; // string, usually short enough. 可能 被 truncated 在 future
+    number = 2; // 【原文】double
+    status = 3; // string or 列表 的 string(len==1)
+    tag = 11; // 列表 的 string (choose multiple 来自 a 列表)
+    date = 4; // 【原文】float64(pb.Value doesn't have int64) or the string
+    file = 5; // relation 可 has 对象 的 specific 类型: 文件, image, audio, video
+    checkbox = 6; // 【原文】boolean
+    url = 7; // string 带有 sanity check
+    email = 8; // string 带有 sanity check
+    phone = 9; // string 带有 sanity check
+    emoji = 10; // one emoji, 可 contains multiple utf-8 symbols
+
+    object = 100; // relation 可 has objectType 到 specify objectType
+    relations = 101; // 【原文】base64-encoded relation pb model
+    map = 102; // relation ， handle map 的 values
+}
+
+enum ObjectOrigin {
+  none = 0;
+  clipboard = 1;
+  dragAndDrop = 2;
+  import = 3;
+  webclipper = 4;
+  sharingExtension = 5;
+  usecase = 6;
+  builtin = 7;
+  bookmark = 8;
+  api = 9;
+}
+
+message RelationLink {
+    string key = 1;
+    RelationFormat format = 2;
+}
+
+message Relations {
+    repeated Relation relations = 1;
+}
+
+message RelationOptions {
+    repeated Relation.Option options = 1;
+}
+
+message InternalFlag {
+    Value value = 1;
+
+// Use such a weird construction due 到 issue 带有 imported 重复 enum 类型
+// Look https://github.com/golang/protobuf/issues/1135 用于 more information.
+    enum Value {
+        editorDeleteEmpty = 0;
+        editorSelectType = 1;
+        editorSelectTemplate = 2;
+        collectionDontIndexLinks = 3;
+    }
+}
+
+
+/*
+        * Works 带有 a smart blocks: Page, Dashboard
+        * Dashboard opened, click 在 a page, Rpc.Block.open, Block.ShowFullscreen(PageBlock)
+*/
+message ObjectView {
+    string rootId = 1; // 【原文】Root block id
+    repeated Block blocks = 2; // 【原文】dependent simple blocks (descendants)
+    repeated DetailsSet details = 3; // details 用于 当前 and dependent 对象
+    SmartBlockType type = 4;
+
+    message DetailsSet {
+        string id = 1; // 【原文】context objectId
+        google.protobuf.Struct details = 2; // 可 不 被 a partial state. 应当 replace client details state
+        repeated string subIds = 3;
+    }
+
+    message RelationWithValuePerObject {
+        string objectId = 1;
+        repeated RelationWithValue relations = 2;
+    }
+
+    repeated Relation relations = 7; // 已废弃, use relationLinks instead
+    repeated RelationLink relationLinks = 10;
+
+    Restrictions restrictions = 8; // 对象 restrictions
+    HistorySize history = 9;
+
+    message HistorySize {
+        int32 undo = 1;
+        int32 redo = 2;
+    }
+
+    repeated BlockParticipant blockParticipants = 11;
+    message BlockParticipant {
+        string blockId = 1;
+        string participantId = 2;
+    }
+}
+
+enum SpaceStatus {
+// Unknown means 空间 是 不 loaded yet
+    Unknown = 0;
+// Loading - 空间 在 progress 的 loading
+    Loading = 1;
+// Ok - 空间 loaded and available
+    Ok = 2;
+// Missing - 空间 是 missing
+    Missing = 3;
+// 错误 - 空间 loading ended 带有 an 错误
+    Error = 4;
+
+// RemoteWaitingDeletion - network 状态 是 "waiting deletion"
+    RemoteWaitingDeletion = 5;
+// RemoteDeleted - 空间 是 deleted 在 当前 network
+    RemoteDeleted = 6;
+// SpaceDeleted - 空间 应当 被 deleted 在 network
+    SpaceDeleted = 7;
+// SpaceActive - 空间 是 active 在 network
+    SpaceActive = 8;
+// SpaceJoining - 账户 是 joining 空间
+    SpaceJoining = 9;
+// SpaceRemoving - 账户 是 removing 来自 空间 or 空间 是 removed 来自 network
+    SpaceRemoving = 10;
+}
+
+message ParticipantPermissionChange {
+    string identity = 1;
+    ParticipantPermissions perms = 2;
+}
+
+enum ParticipantPermissions {
+    Reader = 0;
+    Writer = 1;
+    Owner = 2;
+    NoPermissions = 3;
+    Admin = 4;
+}
+
+enum InviteType {
+    Member = 0; // aclKey contains 密钥 到 sign ACL 记录
+    Guest = 1; // guestKey contains privateKey 的 guest 用户
+    WithoutApprove = 2; // aclKey contains 密钥 到 sign ACL 记录, but 无 approval needed
+}
+
+enum ParticipantStatus {
+    Joining = 0;
+    Active = 1;
+    Removed = 2;
+    Declined = 3;
+    Removing = 4;
+    Canceled = 5;
+}
+
+enum SpaceAccessType {
+    Private = 0;
+    Personal = 1;
+    Shared = 2;
+}
+
+enum SpaceUxType {
+    None = 0; // 旧 value 用于 chat, 已废弃
+    Data = 1; // 【原文】objects-first UX
+    Stream = 2; // stream UX (chat 带有 limited amount 的 owners)
+    Chat = 3; // chat UX, 已废弃
+    OneToOne = 4; // onetoone UX (空间 带有 chat and immutable ACL between two participants)
+}
+
+enum SpaceType {
+    SpaceTypeUnknown  = 0;
+    SpaceTypeRegular  = 1;
+    SpaceTypeTech     = 2;
+    SpaceTypeChat     = 3;
+    SpaceTypeOneToOne = 4;
+}
+
+message Metadata {
+    oneof payload {
+        Payload.IdentityPayload identity = 1;
+    }
+
+    message Payload {
+        message IdentityPayload {
+            bytes profileSymKey = 1;
+        }
+    }
+}
+
+message Notification {
+    string id = 1;
+    int64 createTime = 2;
+    Status status = 4;
+    bool isLocal = 5;
+    oneof payload {
+        Import import = 6;
+        Export export = 8;
+        GalleryImport galleryImport = 9;
+        RequestToJoin requestToJoin = 10;
+        Test test = 11;
+        ParticipantRequestApproved participantRequestApproved = 13;
+        RequestToLeave requestToLeave = 15;
+        ParticipantRemove participantRemove = 16;
+        ParticipantRequestDecline participantRequestDecline = 17;
+        ParticipantPermissionsChange participantPermissionsChange = 18;
+    }
+    string space = 7;
+    string aclHeadId = 14;
+
+    message Import {
+        string processId = 1;
+        model.Import.ErrorCode errorCode = 2;
+        model.Import.Type importType = 3;
+        string spaceId = 4;
+        string name = 5;
+        string spaceName = 6;
+// ID 的 import report page listing per-object issues; 空 when run 曾是 clean (importv2)
+        string reportObjectId = 7;
+// number 的 issues recorded during run, 用于 "imported 带有 N issues" UI (importv2)
+        int64 issuesCount = 8;
+    }
+
+    message Export {
+        Code errorCode = 2;
+        model.Export.Format exportType = 3;
+        ExportReport report = 4;
+// Selected destination directory 用于 该 local export.
+        string path = 5;
+        enum Code {
+            NULL = 0;
+            UNKNOWN_ERROR = 1;
+            BAD_INPUT = 2;
+        }
+    }
+
+    message GalleryImport {
+        string processId = 1;
+        model.Import.ErrorCode errorCode = 2;
+        string spaceId = 3;
+        string name = 4;
+        string spaceName = 5;
+    }
+
+    message RequestToJoin {
+        string spaceId = 1;
+        string identity = 2;
+        string identityName = 3;
+        string identityIcon = 4;
+        string spaceName = 5;
+    }
+
+    message Test {}
+
+    message ParticipantRequestApproved {
+        string spaceId = 1;
+        ParticipantPermissions permissions = 2;
+        string spaceName = 5;
+    }
+
+    message RequestToLeave {
+        string spaceId = 1;
+        string identity = 2;
+        string identityName = 3;
+        string identityIcon = 4;
+        string spaceName = 5;
+    }
+
+    message ParticipantRemove {
+        string identity = 1;
+        string identityName = 2;
+        string identityIcon = 3;
+        string spaceId = 4;
+        string spaceName = 5;
+    }
+
+    message ParticipantRequestDecline {
+        string spaceId = 1;
+        string spaceName = 3;
+    }
+
+    message ParticipantPermissionsChange {
+        string spaceId = 1;
+        ParticipantPermissions permissions = 2;
+        string spaceName = 3;
+    }
+
+    enum Status {
+        Created = 0;
+        Shown = 1;
+        Read = 2;
+        Replied = 3;
+    }
+
+    enum ActionType {
+        CLOSE = 0;
+    }
+}
+
+message Export {
+    enum Format {
+        Markdown = 0;
+        Protobuf = 1;
+        JSON = 2;
+        DOT = 3;
+        SVG = 4;
+        GRAPH_JSON = 5;
+// AnyBlockV2 是 native AnyBlock v2 bundle (pkg/lib/anyblockjson
+// format/v2/SPEC.md): a directory 的 `<ID>.anyblock.json` documents beside an
+// 索引.json and properties.json. Additive — existing values keep
+// their numbers, so a client ， does 不 know it 是 unaffected.
+        AnyBlockV2 = 6;
+    }
+}
+
+message Import {
+    enum Type {
+        Notion = 0;
+        Markdown = 1;
+        External = 2; // 【原文】external developers use it
+        Pb = 3;
+        Html = 4;
+        Txt = 5;
+        Csv = 6;
+        Obsidian = 7; // Markdown 带有 obsidian improvements
+    }
+
+    enum ErrorCode {
+      NULL = 0;
+      UNKNOWN_ERROR = 1;
+      BAD_INPUT = 2;
+      INTERNAL_ERROR = 3;
+      FILE_LOAD_ERROR = 8;
+      IMPORT_IS_CANCELED = 6;
+
+      NOTION_NO_OBJECTS_IN_INTEGRATION= 5;
+      NOTION_SERVER_IS_UNAVAILABLE = 12;
+      NOTION_RATE_LIMIT_EXCEEDED= 13;
+
+      FILE_IMPORT_NO_OBJECTS_IN_ZIP_ARCHIVE = 14;
+      FILE_IMPORT_NO_OBJECTS_IN_DIRECTORY = 17;
+
+      HTML_WRONG_HTML_STRUCTURE = 10;
+
+      PB_NOT_ANYBLOCK_FORMAT = 11;
+
+      CSV_LIMIT_OF_ROWS_OR_RELATIONS_EXCEEDED = 7;
+
+      INSUFFICIENT_PERMISSIONS = 9;
+    }
+}
+
+message Invite {
+    bytes payload = 1;
+    bytes signature = 2;
+}
+
+message InvitePayload {
+    string creatorIdentity = 1;
+    string creatorName = 2;
+    string creatorIconCid = 12;
+    repeated FileEncryptionKey creatorIconEncryptionKeys = 13;
+
+    bytes aclKey = 3;
+    string spaceId = 4;
+    string spaceName = 5;
+    string spaceIconCid = 6;
+    uint32 spaceIconOption = 10;
+    uint32 spaceUxType = 11; // 已废弃
+    uint32 spaceType = 14;
+    repeated FileEncryptionKey spaceIconEncryptionKeys = 7;
+
+
+    InviteType inviteType = 8;
+    bytes guestKey = 9;
+}
+
+message IdentityProfile {
+    string identity = 1;
+    string name = 2;
+    string iconCid = 3;
+    repeated FileEncryptionKey iconEncryptionKeys = 4;
+    string description = 5;
+    string globalName = 6;
+}
+
+message IdentityProfileWithKey {
+    IdentityProfile identityProfile = 1;
+    bytes requestMetadata = 2;
+}
+
+message FileInfo {
+    string fileId = 1;
+    repeated FileEncryptionKey encryptionKeys = 2;
+}
+
+message FileEncryptionKey {
+  string path = 1;
+  string key = 2;
+}
+
+enum ImageKind {
+    Basic = 0;
+    Cover = 1;
+    Icon = 2;
+    AutomaticallyAdded = 3;
+}
+
+enum FileIndexingStatus {
+    NotIndexed = 0;
+    Indexed = 1;
+    NotFound = 2;
+}
+
+enum SpaceShareableStatus {
+    StatusUnknown = 0;
+    StatusShareable = 1;
+    StatusNotShareable = 2;
+}
+
+message ManifestInfo {
+    string schema = 1 [json_name="$schema"];
+    string id = 2;
+    string name = 3;
+    string author = 4;
+    string license = 5;
+    string title = 6;
+    string description = 7;
+    repeated string screenshots = 8;
+    string downloadLink = 9;
+    int32 fileSize = 10;
+    repeated string categories = 11;
+    string language = 12;
+}
+
+enum NameserviceNameType {
+// .任意 suffix
+    AnyName = 0;
+}
+
+
+message Membership {
+    enum Status {
+        StatusUnknown = 0;
+// please wait a bit more, we 是 still processing your 请求
+// payment 是 confirmed, but we need more 时间 到 do some side-effects:
+// - increase 限制
+// 【原文】- send emails
+// 【原文】- allocate names
+        StatusPending = 1;
+// membership 是 active, ready 到 use!
+        StatusActive = 2;
+// 在 some cases we need 到 finalize process:
+// - 如果 用户 has bought membership directly without 第一个 calling
+// 【原文】the BuySubscription method
+// 在 该 case please call Finalize 到 finish process
+        StatusPendingRequiresFinalization = 3;
+    }
+
+    enum PaymentMethod {
+        MethodNone = 0;
+        MethodStripe = 1;
+        MethodCrypto = 2;
+        MethodInappApple = 3;
+        MethodInappGoogle = 4;
+    }
+
+    enum EmailVerificationStatus {
+// 用户 NEVER comleted verification 的 email
+        StatusNotVerified = 0;
+// 用户 has asked 用于 新 代码, but did 不 enter it yet
+// (even 如果 email 曾是 verified before, you 可 ask 到 UPDATE your e-mail)
+// please wait, you 可 不 ask 用于 more 代码 yet
+        StatusCodeSent = 1;
+// e-mail 是 finally verified
+        StatusVerified = 2;
+    }
+
+// it 曾是 Tier before, changed 到 int32 到 allow dynamic values
+    uint32 tier = 1;
+    Status status = 2;
+    uint64 dateStarted = 3;
+    uint64 dateEnds = 4;
+    bool isAutoRenew = 5;
+    PaymentMethod paymentMethod = 6;
+// 可 被 空 如果 用户 did 不 ask 用于 任意 name
+    string nsName = 7;
+    anytype.model.NameserviceNameType nsNameType = 8;
+// 如果 email 曾是 verified by 用户 or set during checkout - it 将 被 here
+    string userEmail = 9;
+    bool subscribeToNewsletter = 10;
+}
+
+message MembershipTierData {
+    enum PeriodType {
+        PeriodTypeUnknown = 0;
+        PeriodTypeUnlimited = 1;
+        PeriodTypeDays = 2;
+        PeriodTypeWeeks = 3;
+        PeriodTypeMonths = 4;
+        PeriodTypeYears = 5;
+    }
+
+// 该 是 a unique Payment 节点 ID 的 tier
+// 警告: tiers 可 被 sorted differently, 不 according 到 their ID!
+    uint32 id = 1;
+// localazied name 的 tier
+    string name = 2;
+// 【原文】just a short technical description
+    string description = 3;
+// 是 该 tier 用于 testing and debugging 仅?
+    bool isTest = 4;
+// how long 是 period 的 subscription
+    PeriodType periodType = 5;
+// 【原文】i.e. "5 days" or "3 years"
+    uint32 periodValue = 6;
+// 该 one 是 a price we use 仅 在 Stripe platform
+    uint32 priceStripeUsdCents = 7;
+// number 的 任意 NS names ， 该 tier includes
+// also 在 "features" 列表 (see below)
+    uint32 anyNamesCountIncluded = 8;
+// somename.任意 - 是 的 len 8
+    uint32 anyNameMinLength = 9;
+// localized strings 用于 features
+    repeated string features = 10;
+// 【原文】green, blue, red, purple, custom
+    string colorStr = 11;
+
+// 【原文】Stripe platform-specific data:
+    string stripeProductId = 12;
+    string stripeManageUrl = 13;
+
+// 【原文】iOS platform-specific data:
+    string iosProductId = 15;
+    string iosManageUrl = 16;
+
+// 【原文】Android platform-specific data:
+    string androidProductId = 17;
+    string androidManageUrl = 18;
+
+// 【原文】"limited offer" or somehing like that
+    string offer = 19;
+}
+
+message MembershipV2 {
+    message Amount {
+// ISO 4217 currency 代码
+        string currency = 1;
+
+// 【原文】$0.01 = 1
+// 【原文】$1.00 = 100
+// 【原文】also supports negative amounts!
+// some invoices 可 have negatice amount (refund)
+        int64 amountCents = 2;
+    }
+
+    enum Platform {
+        Unknown = 0;
+        Desktop = 1;
+        MobileIOS = 2;
+        MobileAndroid = 3;
+        Web = 4;
+    }
+
+    enum PaymentProvider {
+        None = 0;
+        Stripe = 1;
+        Crypto = 2;
+        BillingPortal = 3;
+        AppStore = 4;
+        GooglePlay = 5;
+    }
+
+// Freshness 的 one membership resource (状态 or products) as served 在
+// 【原文】MembershipV2 GetStatus/GetProducts responses and update events.
+// zero value 是 FRESH, so a 消息 ， never sets it keeps
+// 【原文】pre-freshness meaning.
+    enum Freshness {
+// data comes 来自 a recent successful fetch 来自 payment 节点
+        FRESH = 0;
+// data comes 来自 an earlier successful fetch: latest refresh
+// failed, or age 的 cached data 是 unknown
+        STALE = 1;
+// never fetched successfully: data 是 an 空 placeholder and 必须 被
+// treated as unknown (不 as "无 membership")
+        NONE = 2;
+    }
+
+// Class 的 最后一个 failed refresh 的 a resource
+    enum RefreshError {
+        RefreshErrorNull = 0;
+// transient: timeout, payment 节点 unreachable, connection closed
+        RefreshErrorPaymentNode = 1;
+// 任意 other failure
+        RefreshErrorUnknown = 2;
+    }
+
+// Orders published states 的 one resource. Apply a 响应 or event 仅
+// 如果 其 revision 是 newer than one already applied. epoch 是 random
+// and changes 在 every payments service start (账户 select or restart):
+// 【原文】reset ordering state when it changes.
+    message Revision {
+        uint64 epoch = 1;
+        uint64 counter = 2;
+    }
+
+    message FetchState {
+        Freshness freshness = 1;
+// unix seconds 的 最后一个 successful fetch, 0 如果 never or unknown
+        int64 lastSuccessfulFetchAt = 2;
+// set while latest refresh 的 resource failed
+        RefreshError lastRefreshError = 3;
+        Revision revision = 4;
+    }
+
+    enum Period {
+        Unlimited = 0 [deprecated = true];
+        Monthly = 1;
+        Yearly = 2;
+        ThreeYears = 3;
+        Lifetime = 4;
+    }
+
+    message Invoice {
+        uint64 date = 1;
+        Amount total = 2;
+    }
+
+    message Features {
+        uint64 storageBytes = 1;
+        uint32 spaceReaders = 2;
+        uint32 spaceWriters = 3;
+        uint32 sharedSpaces = 4;
+        uint32 teamSeats = 5;
+        uint32 anyNameCount = 6;
+        uint32 anyNameMinLen = 7;
+        uint32 privateSpaces = 8; 
+    }
+
+    message Product {
+        string id = 1;
+        string name = 2;
+        string description = 3;
+
+        bool isTopLevel = 4;
+        bool isHidden = 5;
+
+// isIntro flag 可 被 使用 as follows:
+//
+// 1. 如果 当前 user's top level product has isIntro flag ->
+// then you'd rather show a FULL 列表 的 所有 products
+// 到 enable upgrading 来自 当前 product
+// 2. but 如果 当前 user's top level product has 无 isIntro flag ->
+// then it means ， 该 plan 曾是 aquired and 用户 need 到 control it.
+// then show "second screen" 到 control ， product instead
+        bool isIntro = 6;
+        
+// isUpgradeable 可 被 使用 as follows:
+//
+// 如果 当前 user's top level product has isUpgradeable flag ->
+// show incentives 到 buy something else
+        bool isUpgradeable = 7;
+
+        repeated Amount pricesYearly = 8;
+        repeated Amount pricesMonthly = 9;
+
+// 【原文】green, blue, red, purple, custom, etc
+        string colorStr = 10;
+        string offer = 11;
+
+        Features features = 12;
+        repeated Amount pricesLifetime = 13;
+    }
+
+    message PurchaseInfo {
+        uint64 dateStarted = 1;
+        uint64 dateEnds = 2;
+        bool isAutoRenew = 3;
+        Period period = 4;
+    }
+
+    message ProductStatus {
+        enum Status {
+            StatusUnknown = 0;
+            StatusPending = 1;
+            StatusActive = 2;
+            StatusPendingRequiresAnyNameAllocation = 3;
+        }
+        Status status = 1;
+    }
+
+    message PurchasedProduct {
+        Product product = 1;
+        PurchaseInfo purchaseInfo = 2;
+        ProductStatus productStatus = 3;
+    }
+
+    message CartProduct {
+        Product product = 1;    
+// 否则 - monthly or isLifetime
+        bool isYearly = 2;
+// set 到 是 如果 you want 到 remove 该 item 来自 customer
+// it's like setting -1 到 some product
+        bool remove = 3;
+// 如果 是 - then 该 是 lifetime product (无 matter what isYearly above 是)
+// unfortunately we do 不 use Period here 到 keep compatibility 带有 旧 versions
+// 【原文】that still use isYearly!
+        bool isLifetime = 4;
+    }
+
+    message Cart {
+// 如果 you add Nx 相同 product - it 将 被 Nx 在 'products' array, i.e:
+// 每个 product instance has a unique 索引
+        repeated CartProduct products = 1;
+// total amount 的 cart (including discounts, etc)
+        Amount total = 2;
+
+// 在 case you 是 paying 在 middle 的 period (用于 existing customers)
+// 下一个 invoice amount 将 also 被 generated
+        Amount totalNextInvoice = 3;
+        uint64 nextInvoiceDate = 4;
+        repeated string appliedPromocodes = 5;
+    }
+
+    message CryptoCheckout {
+        string invoiceURL = 1;
+        Amount total = 2;
+        bool isCanCancel = 3;
+    }
+
+    message Data {
+        repeated PurchasedProduct products = 1;
+        Invoice nextInvoice = 2;
+        string teamOwnerID = 3;
+        PaymentProvider paymentProvider = 4;
+        repeated string appliedPromocodes = 5;
+    }
+}
+
+enum DeviceNetworkType {
+    WIFI = 0;
+    CELLULAR = 1;
+    NOT_CONNECTED = 2;
+}
+
+message Detail {
+    string key = 1;
+    google.protobuf.Value value = 2; // NUll - removes 密钥
+}
+
+message DeviceInfo {
+    string id = 1;
+    string name = 2;
+    int64 addDate = 3;
+    bool archived = 4;
+    bool isConnected = 5;
+}
+
+message ChatState {
+    message UnreadState {
+        string oldestOrderId = 1; // oldest(在 lex sorting) unread 消息 order ID. Client 应当 ALWAYS scroll through unread messages 来自 oldest 到 newest
+        int32 counter = 2; // total number 的 unread messages
+    }
+    UnreadState messages = 1; // 【原文】unread messages
+    UnreadState mentions = 2; // 【原文】unread mentions
+    string lastStateId = 3; // reflects state 的 chat db at moment 的 sending 响应/event ， includes 该 state
+    int64 order = 4; // Order 是 serial number 的 该 state. Client 应当 apply chat state 仅 如果 其 order 是 greater than previously saved order
+    string unreadReactionOrderId = 5; // order ID 的 newest 消息 带有 任意 unread reactions
+}
+
+message ChatMessage {
+    string id = 1;        // Unique 消息 identifier
+    string orderId = 2;   // Lexicographical ID 用于 消息 在 order 的 树 traversal
+    string creator = 3;       // Identifier 用于 消息 creator
+    int64 createdAt = 4;
+    int64 modifiedAt = 9;
+
+// stateId 是 ever-increasing ID (BSON ObjectId) 用于 该 消息. Unlike orderId, 该 ID 是 ordered by 时间 messages 是 added. 用于 example, it's useful 到 prevent accidental reading 的 messages 来自 past when a ChatReadMessages 请求 是 sent: a 消息 来自 past 可能 appear, but client 是 still unaware 的 it
+    string stateId = 11;
+
+    string replyToMessageId = 5;   // Identifier 用于 消息 being replied 到
+    MessageContent message = 6;  // 消息 content
+    repeated Attachment attachments = 7;  // 【原文】Attachments slice
+    Reactions reactions = 8;  // Reactions 到 消息
+    bool read = 10; // 消息 read 状态
+    bool mentionRead = 12;
+    bool hasMention = 14;
+    bool synced = 13;
+    bool pinned = 15;
+    bool unreadReaction = 16;
+    repeated MessageBlock blocks = 17;  // Ordered 列表 的 content blocks
+// 【原文】deleted marks a soft-deleted discussion comment (a tombstone). It keeps id, orderId,
+// creator, createdAt and replyToMessageId, so replies keep their thread; 消息,
+// attachments, blocks and reactions 是 空 and modifiedAt 是 0. 仅 discussions
+// produce it; a deleted space-chat 消息 是 removed and announced 带有 Event.Chat.Delete.
+// A tombstone can't 被 edited, reacted 到, pinned or replied 到.
+    bool deleted = 18;
+
+    message MessageContent {
+        string text = 1;      // text content 的 消息 part
+        Block.Content.Text.Style style = 2;    // style/类型 的 消息 part
+        repeated Block.Content.Text.Mark marks = 3; // 列表 的 marks applied 到 text
+    }
+
+    message Attachment {
+        string target = 1;       // Identifier 用于 attachment 对象
+        AttachmentType type = 2; // 类型 的 attachment
+
+        enum AttachmentType {
+            FILE = 0;   // 文件 attachment
+            IMAGE = 1;  // 【原文】Image attachment
+            LINK = 2;   // 【原文】Link attachment
+        }
+    }
+
+    message Reactions {
+        map<string, IdentityList> reactions = 1; // Map 的 emoji 到 列表 的 用户 ID
+
+        message IdentityList {
+            repeated string ids = 1; // 列表 的 用户 ID
+        }
+    }
+
+    message MessageBlock {
+        oneof content {
+            MessageBlockText text = 1;
+            MessageBlockLink link = 2;
+            MessageBlockEmbed embed = 3;
+            MessageBlockEditorQuote editorQuote = 4;
+            MessageBlockMessageQuote messageQuote = 5;
+        }
+    }
+
+    message MessageBlockText {
+        string text = 1;
+        Block.Content.Text.Style style = 2;
+        repeated Block.Content.Text.Mark marks = 3;
+        bool checked = 4;
+        string lang = 5;
+    }
+
+    message MessageBlockLink {
+        string targetObjectId = 1;
+        LinkType type = 2;
+
+        enum LinkType {
+            Object = 0;
+            File = 1;
+            Image = 2;
+            Bookmark = 3;
+        }
+    }
+
+    message MessageBlockEmbed {
+        string text = 1;
+        Block.Content.Latex.Processor processor = 2;
+    }
+
+    message MessageBlockEditorQuote {
+        string blockId = 1;           // ID 的 quoted block 在 source 对象
+        MessageBlockText content = 2; // 【原文】quoted block content (text, style, marks, ...)
+    }
+
+    message MessageBlockMessageQuote {
+        string messageId = 1;         // ID 的 quoted chat 消息
+        string participantId = 2;     // ID 的 participant who authored quoted 消息
+        MessageBlockText content = 3; // quoted 消息 content (text, style, marks,。..)
+    }
+}
+
+enum SyncStatus {
+    SyncStatusSynced  = 0;
+    SyncStatusSyncing = 1;
+    SyncStatusError   = 2;
+    SyncStatusQueued  = 3;
+}
+
+enum SyncError {
+    SyncErrorNull                = 0;
+    SyncErrorIncompatibleVersion = 2;
+    SyncErrorNetworkError        = 3;
+    SyncErrorOversized           = 4;
+}
+
+enum TemplateNamePrefillType {
+    Empty = 0;
+    FromTemplateName = 1;
+}
+
+message Placeholder {
+    string relationKey = 1;
+    repeated Value values = 2;
+
+    message Value {
+        Type type = 1;
+        google.protobuf.Value value = 2;
+    }
+
+    enum Type {
+        PlaceholderValue = 0;
+        PlaceholderToday = 1;
+        PlaceholderCurrentUser = 2;
+    }
+}

@@ -1,0 +1,128 @@
+// ============================================================
+// 源文件：src/any-sync-node/nodesync/nodesyncproto/protos/nodesync.proto
+// 所属仓库：any-sync-node ｜ proto 包：anyNodeSync ｜ 错误码区间：1000–1099
+// 说明：同步节点之间的数据同步：分区级头同步、冷同步（快速下载空间）、归档接管。
+// ============================================================
+
+syntax = "proto3";
+package anyNodeSync;
+
+option go_package = "nodesync/nodesyncproto";
+
+// 错误码（区间 1000–1099）
+enum ErrCodes {
+    // 未知 / 兜底
+    Unexpected = 0;
+    // 期望是协调节点
+    ExpectedCoordinator = 1;
+    // 不支持的存储
+    UnsupportedStorage = 2;
+    // 空间已删除
+    SpaceDeleted = 3;
+    // 归档不可用
+    ArchiveUnavailable = 4;
+    // 归档对象缺失
+    ArchiveObjectMissing = 5;
+    // 对方不是节点
+    PeerIsNotNode = 6;
+    // 不负责该空间
+    NotResponsible = 7;
+    // 空间等待删除
+    SpacePendingDeletion = 8;
+    // 错误码区间基准
+    ErrorOffset = 1000;
+}
+
+// 节点间同步服务
+service NodeSync {
+    // PartitionSync：按一致性哈希分区比较所有空间
+    rpc PartitionSync(PartitionSyncRequest) returns (PartitionSyncResponse);
+    // ColdSync：请求冷同步流，以便快速下载空间
+    rpc ColdSync(ColdSyncRequest) returns (stream ColdSyncResponse);
+    // AdoptArchive：向对方提供存放在共享归档里的空间快照；
+    // 对方把对象复制到自己的前缀下并登记为“已归档”，不实际展开
+    rpc AdoptArchive(AdoptArchiveRequest) returns (AdoptArchiveResponse);
+}
+
+// PartitionSyncRange 表示一次范围查询
+message PartitionSyncRange {
+    uint64 from = 1;
+    uint64 to = 2;
+    uint32 limit = 3;
+    bool elements = 4;
+}
+
+// PartitionSyncResult 是某个范围的响应
+message PartitionSyncResult {
+    bytes hash = 1;
+    repeated PartitionSyncResultElement elements = 2;
+    uint32 count = 3;
+}
+
+// PartitionSyncResultElement 表示单个空间的状态
+message PartitionSyncResultElement {
+    string id = 1;
+    string head = 2;
+}
+
+// PartitionSyncRequest 是分区同步请求
+message PartitionSyncRequest {
+    uint64 partitionId = 1;
+    repeated PartitionSyncRange ranges = 2;
+}
+
+// PartitionSyncResponse 是分区同步响应
+message PartitionSyncResponse {
+    repeated PartitionSyncResult results = 1;
+}
+
+// ColdSyncRequest 是冷同步请求
+message ColdSyncRequest {
+    string spaceId = 1;
+    ColdSyncProtocolType protocolType = 2;
+}
+
+// ColdSyncResponse 是冷同步流的一帧
+message ColdSyncResponse {
+    string filename = 2;
+    bytes data = 3;
+    uint32 crc32 = 4;
+    ColdSyncProtocolType protocolType = 5;
+}
+
+// 冷同步使用的存储协议类型
+enum ColdSyncProtocolType {
+    // 旧版 pogreb 存储
+    Pogreb = 0;
+    // any-store SQLite 存储
+    AnystoreSqlite = 1;
+}
+
+// AdoptArchiveRequest 是归档接管请求
+message AdoptArchiveRequest {
+    string spaceId = 1;
+    // srcKey 是共享桶中 gzip 快照的完整键（发送方前缀）
+    string srcKey = 2;
+    // 快照时刻空间的头节点哈希（发送方索引中记录的值）
+    string oldHash = 3;
+    string newHash = 4;
+    // eager 为 true 时要求接收方立即在后台恢复该空间
+    bool eager = 5;
+    int64 compressedSize = 6;
+    int64 uncompressedSize = 7;
+}
+
+// AdoptArchiveResponse 是归档接管响应
+message AdoptArchiveResponse {
+    AdoptArchiveResult result = 1;
+}
+
+// 归档接管结果
+enum AdoptArchiveResult {
+    // 快照已复制并登记
+    AdoptArchiveOk = 0;
+    // 接收方已有同一 heads 的副本：视为对发送方的持久化确认
+    AdoptArchiveAlreadyHaveSame = 1;
+    // 接收方已有 heads 不同的副本；发送方需先通过树同步收敛，才能确认交接
+    AdoptArchiveAlreadyHaveDiverged = 2;
+}

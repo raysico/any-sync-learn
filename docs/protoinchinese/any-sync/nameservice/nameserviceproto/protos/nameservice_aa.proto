@@ -1,0 +1,248 @@
+// ============================================================
+// 源文件：src/nameservice/nameserviceproto/protos/nameservice_aa.proto
+// 所属仓库：any-sync
+// proto 包：（无）
+// 服务：AnynsAccountAbstraction
+// RPC 数量：7
+// 说明：由 scripts/translate-proto.py 生成；字段名、编号、类型保持原样，注释译为中文。
+// ============================================================
+
+syntax = "proto3";
+option go_package = "nameservice/nameserviceproto";
+
+message UserAccount {
+// An Ethereum address ， owns ， 账户
+  string ownerEthAddress = 1;
+
+// 该 smart contract really controls 所有 names
+// you 可 ask。owner() method 到 get 'ownerEthAddress'
+  string ownerSmartContracWalletAddress = 2;
+
+// ownerSmartContracWalletAddress 字段 是 calculated automatically
+// 来自 ownerEthAddress even 如果 SCW 是 不 deployed yet
+// SCW 是 deployed automatically after 第一个 operation
+  bool ownerSmartContracWalletDeployed = 3;
+
+// Number 的 names ， 用户 可 buy. We 将 mint him tokens ， he 可 use 到 buy names
+// 【原文】(one token per name)
+  uint64 namesCountLeft = 4;
+
+// Number 的 gas operations: update name, add 新 data, etc
+  uint64 operationsCountLeft = 5;
+}
+
+message AdminFundUserAccountRequest {
+// 【原文】An Ethereum address that owns that name
+  string ownerEthAddress = 1;
+
+// Number 的 names ， 用户 可 buy. We 将 mint him tokens ， he 可 use 到 buy names
+// 【原文】(one token per name)
+  uint64 namesCount = 2;
+}
+
+message AdminFundUserAccountRequestSigned {
+// 【原文】AdminFundUserAccountRequest struct
+  bytes payload = 1;
+
+// 载荷 signed by Admin 的 该 service
+  bytes signature = 2; 
+}
+
+message AdminFundGasOperationsRequest {
+// 【原文】An Ethereum address that owns that name
+  string ownerEthAddress = 1;
+
+  string ownerAnyID = 2;
+
+// Number 的 gas operations: update name, add 新 data, etc
+  uint64 operationsCount = 3;
+}
+
+message AdminFundGasOperationsRequestSigned {
+// 【原文】AdminFundGasOperationsRequest struct
+  bytes payload = 1;
+
+// 载荷 signed by Admin 的 该 service
+  bytes signature = 2; 
+}
+
+// 无 签名 必需 here
+message GetUserAccountRequest {
+// An Ethereum address ， owns ， 账户
+  string ownerEthAddress = 1;
+}
+
+message GetDataNameRegisterResponse {
+  bytes data = 1;
+
+  bytes context = 2;
+}
+
+message CreateUserOperationRequest { 
+  bytes data = 1;
+
+// "data" signed 带有 Ethereum 私有 密钥
+  bytes signedData = 2;
+
+  bytes context = 3;
+
+  string ownerEthAddress = 4;
+
+// 在 following format: "A5k2d9sFZw84yisTxRnz2bPRd1YPfVfhxqymZ6yESprFTG65"
+// you 可 get it 带有 账户().SignKey.GetPublic().账户()
+  string ownerAnyID = 5;
+
+// 所有 operations currently 是 towards single name, please specify it
+// we 可 use it 用于 caching, etc purps.
+  string fullName = 6;
+}
+
+message CreateUserOperationRequestSigned {
+// 【原文】CreateUserOperationRequest struct
+  bytes payload = 1;
+
+// 载荷 signed 带有 Anytype 身份
+  bytes signature = 2;
+}
+
+message NameRegisterRequest {
+  string fullName = 1;
+
+// A content hash attached 到 该 name
+// 该 应当 不 被 空!
+// 在 following format: "A5k2d9sFZw84yisTxRnz2bPRd1YPfVfhxqymZ6yESprFTG65"
+// you 可 get it 带有 账户().SignKey.GetPublic().账户()
+  string ownerAnyAddress = 2;
+  
+// 【原文】An Ethereum address that owns that name
+  string ownerEthAddress = 3;
+
+// 如果 否 -> name ownership 将 belong 到 ownerEthAddress
+// 如果 是 -> name ownership 将 belong 到 SCW 的 ownerEthAddress (AccountAbstraction)
+  bool registerToSmartContractWallet = 4;
+
+// How many months 到 register name 用于
+  uint32 registerPeriodMonths = 5;
+
+// 【原文】Example:
+// 1 - register alice.任意 -> ANYID123123
+// 2 - register xxxx.任意 -> ANYID123123
+// reverse resolve ANYID123123 将 return xxxx.任意
+//
+// 待办: currently by 默认 "是"
+// 【原文】bool updateReverseResolver = 4;
+}
+
+message NameRegisterRequestSigned {
+// 【原文】NameRegisterRequest struct
+  bytes payload = 1;
+
+// 载荷 signed by 载荷.ownerEthAddress
+  bytes signature = 2; 
+}
+
+message NameRenewRequest {
+  string fullName = 1;
+
+// A content hash attached 到 该 name
+// 该 应当 不 被 空!
+// 在 following format: "A5k2d9sFZw84yisTxRnz2bPRd1YPfVfhxqymZ6yESprFTG65"
+// you 可 get it 带有 账户().SignKey.GetPublic().账户()
+  string ownerAnyAddress = 2;
+
+// 【原文】An Ethereum address that owns that name
+  string ownerEthAddress = 3;
+
+// 如果 否 -> name ownership 将 belong 到 ownerEthAddress
+// 如果 是 -> name ownership 将 belong 到 SCW 的 ownerEthAddress (AccountAbstraction)
+  bool renewToSmartContractWallet = 4;
+
+// How many months 到 register name 用于
+  uint32 renewPeriodMonths = 5;
+}
+
+message NameRenewRequestSigned {
+// 【原文】NameRenewRequest struct
+  bytes payload = 1;
+
+// 载荷 signed by 载荷.ownerEthAddress
+  bytes signature = 2;
+}
+
+message NameRegisterForSpaceRequest {
+  string fullName = 1;
+
+// A content hash attached 到 该 name
+// 该 应当 不 被 空!
+// 在 following format: "A5k2d9sFZw84yisTxRnz2bPRd1YPfVfhxqymZ6yESprFTG65"
+// you 可 get it 带有 账户().SignKey.GetPublic().账户()
+  string ownerAnyAddress = 2;
+  
+// 【原文】An Ethereum address that owns that name
+  string ownerEthAddress = 3;
+
+// A SpaceID attached 到 该 name
+  string spaceId = 4;
+
+// How many months 到 register name 用于
+  uint32 registerPeriodMonths = 5;
+}
+
+message GetOperationStatusRequest {
+  string operationId = 1;
+}
+
+enum OperationState {
+  OpUnknown = 0;
+  
+  Pending = 1;
+  PendingOrNotFound = 2;
+  Completed = 3;
+  Error = 4;
+}
+
+message OperationResponse {
+  string operationId = 1;
+
+  OperationState operationState = 2;
+}
+
+service AnynsAccountAbstraction {
+// 【原文】COMMON METHODS:
+  rpc GetOperation(GetOperationStatusRequest) returns (OperationResponse) {}
+
+// 【原文】ADMIN METHODS:
+// 将 send "access tokens" 到 user's 账户 (到 his SmartContractWallet).
+// 用户 将 被 able 到 use 这些 "access tokens" 到 register his name later directly.
+//
+// Blocking, 将 send TX 到 EVM chain
+// 如果 finished without 错误 -> please use GetUserAccount 到 get updated info
+  rpc AdminFundUserAccount(AdminFundUserAccountRequestSigned) returns (OperationResponse) {}
+  
+// 每个 operation 是 a single blockchain TX like "name update".
+// 用户 将 被 able 到 send operations without having 任意 gas 在 his wallet later
+  rpc AdminFundGasOperations(AdminFundGasOperationsRequestSigned) returns (OperationResponse) {}
+
+// 用户 METHODS:
+// Use it 到:
+// 【原文】1 - get your SmartContractWallet address
+// 【原文】2 - get how many operations you still have
+  rpc GetUserAccount(GetUserAccountRequest) returns (UserAccount) {}
+
+// 【原文】Example usage:
+// 【原文】1. get data + context
+// 2. sign it 带有 your Ethereum 私有 密钥
+// 【原文】3. send it using CreateUserOperation
+// 4. check operation 状态 using GetOperation
+//
+// Register 新 name 用于 my 任意 身份
+  rpc GetDataNameRegister(NameRegisterRequest) returns (GetDataNameRegisterResponse) {}
+
+// Register 新 name and attach 空间 ID 到 it
+  rpc GetDataNameRegisterForSpace(NameRegisterForSpaceRequest) returns (GetDataNameRegisterResponse) {}
+  
+// 待办
+// 【原文】rpc GetDataNameUpdate(NameUpdateRequest) returns (GetDataNameRegisterResponse) {}
+
+  rpc CreateUserOperation(CreateUserOperationRequestSigned) returns (OperationResponse) {}
+}

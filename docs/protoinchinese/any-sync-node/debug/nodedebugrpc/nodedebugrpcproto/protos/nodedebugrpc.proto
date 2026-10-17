@@ -1,0 +1,89 @@
+// ============================================================
+// 源文件：src/any-sync-node/debug/nodedebugrpc/nodedebugrpcproto/protos/nodedebugrpc.proto
+// 所属仓库：any-sync-node ｜ proto 包：nodeapi
+// 说明：节点的调试接口（DRPC），用于排查树与空间状态。
+// ============================================================
+
+syntax = "proto3";
+package nodeapi;
+
+option go_package = "debug/nodedebugrpc/nodedebugrpcproto";
+
+service NodeApi {
+    // DumpTree：导出指定树的调试文本
+    rpc DumpTree(DumpTreeRequest) returns(DumpTreeResponse);
+    // TreeParams：查询树的根与头节点
+    rpc TreeParams(TreeParamsRequest) returns(TreeParamsResponse);
+    // AllTrees：列出空间内所有树
+    rpc AllTrees(AllTreesRequest) returns(AllTreesResponse);
+    // AllSpaces：列出该节点持有的所有空间
+    rpc AllSpaces(AllSpacesRequest) returns(AllSpacesResponse);
+    // ForceNodeSync：强制触发一次节点同步
+    rpc ForceNodeSync(ForceNodeSyncRequest) returns(ForceNodeSyncResponse);
+    // NodesAddressesBySpace：查询负责某空间的节点地址
+    rpc NodesAddressesBySpace(NodesAddressesBySpaceRequest) returns(NodesAddressesBySpaceResponse);
+}
+
+// DumpTreeRequest 导出树的请求
+message DumpTreeRequest {
+    string spaceId = 1;
+    string documentId = 2;
+}
+
+// DumpTreeResponse 导出树的文本
+message DumpTreeResponse {
+    string dump = 1;
+}
+
+// AllTreesRequest 列出树
+message AllTreesRequest {
+    string spaceId = 1;
+}
+
+// Tree 是一棵树的摘要
+message Tree {
+    string id = 1;
+    repeated string heads = 2;
+}
+
+// AllTreesResponse 返回空间内所有树
+message AllTreesResponse {
+    repeated Tree trees = 1;
+}
+
+// AllSpacesRequest 列出空间（无参数）
+message AllSpacesRequest {
+}
+
+// AllSpacesResponse 返回空间 ID 列表
+message AllSpacesResponse {
+    repeated string spaceIds = 1;
+}
+
+// TreeParamsRequest 查询树参数
+message TreeParamsRequest {
+    string spaceId = 1;
+    string documentId = 2;
+}
+
+// TreeParamsResponse 返回树参数
+message TreeParamsResponse {
+    string rootId = 1;
+    repeated string headIds = 2;
+}
+
+// ForceNodeSyncRequest 强制同步（无参数）
+message ForceNodeSyncRequest {}
+
+// ForceNodeSyncResponse 强制同步响应
+message ForceNodeSyncResponse {}
+
+// NodesAddressesBySpaceRequest 查询空间负责节点
+message NodesAddressesBySpaceRequest {
+    string spaceId = 1;
+}
+
+// NodesAddressesBySpaceResponse 返回节点地址
+message NodesAddressesBySpaceResponse {
+    repeated string nodeAddresses = 1;
+}
