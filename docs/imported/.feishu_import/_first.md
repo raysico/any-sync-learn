@@ -1,0 +1,383 @@
+
+> 📌 本文档为《any-sync 协议 Protobuf 接口参考》系列第 3 篇：消息结构 · 协议层（文件 / 空间 / 共识 / 协调器 / 名称 / 支付等）。
+
+### any-block/format/v1/proto/snapshot.proto
+
+#### `Profile`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `name` |  |
+| 2 | `repeated string` | `avatar` |  |
+| 4 | `repeated string` | `address` |  |
+| 5 | `repeated string` | `spaceDashboardId` |  |
+| 6 | `repeated string` | `profileId` |  |
+| 7 | `repeated string` | `analyticsId` |  |
+| 8 | `repeated string` | `startingPage` |  |
+| 9 | `repeated WidgetBlock` | `widgets` |  |
+
+#### `SnapshotWithType`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated anytype.model.SmartBlockType` | `sbType` |  |
+| 2 | `repeated anytype.Change.Snapshot` | `snapshot` |  |
+
+#### `WidgetBlock`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated model.Block.Content.Widget.Layout` | `layout` |  |
+| 2 | `repeated string` | `targetObjectId` |  |
+| 3 | `repeated int32` | `objectLimit` |  |
+
+
+### any-sync-filenode/index/indexproto/protos/index.proto
+
+#### `CidEntry`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated uint64` | `size` |  |
+| 2 | `repeated int64` | `createTime` |  |
+| 3 | `repeated int64` | `updateTime` |  |
+| 4 | `repeated int32` | `refs` |  |
+| 5 | `repeated uint32` | `version` |  |
+
+#### `CidList`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated bytes` | `cids` |  |
+
+#### `FileEntry`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `cids` |  |
+| 2 | `repeated uint64` | `size` |  |
+| 3 | `repeated int64` | `createTime` |  |
+| 4 | `repeated int64` | `updateTime` |  |
+
+#### `GroupEntry`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `groupId` |  |
+| 2 | `repeated int64` | `createTime` |  |
+| 3 | `repeated int64` | `updateTime` |  |
+| 4 | `repeated uint64` | `size` |  |
+| 5 | `repeated uint64` | `cidCount` |  |
+| 6 | `repeated string` | `spaceIds` |  |
+| 7 | `repeated uint64` | `limit` |  |
+| 8 | `repeated uint64` | `accountLimit` |  |
+
+#### `OwnershipRecord`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `ownerId` |  |
+| 2 | `repeated int64` | `aclRecordIndex` |  |
+
+#### `SpaceEntry`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `groupId` |  |
+| 2 | `repeated int64` | `createTime` |  |
+| 3 | `repeated int64` | `updateTime` |  |
+| 4 | `repeated uint64` | `size` |  |
+| 5 | `repeated uint32` | `fileCount` |  |
+| 6 | `repeated uint64` | `cidCount` |  |
+| 7 | `repeated uint64` | `limit` |  |
+
+
+### any-sync-node/debug/nodedebugrpc/nodedebugrpcproto/protos/nodedebugrpc.proto
+
+#### `AllSpacesRequest`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+
+#### `AllSpacesResponse`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `spaceIds` |  |
+
+#### `AllTreesRequest`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `spaceId` |  |
+
+#### `AllTreesResponse`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated Tree` | `trees` |  |
+
+#### `DumpTreeRequest`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `spaceId` |  |
+| 2 | `repeated string` | `documentId` |  |
+
+#### `DumpTreeResponse`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `dump` |  |
+
+#### `ForceNodeSyncRequest`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+
+#### `ForceNodeSyncResponse`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+
+#### `NodesAddressesBySpaceRequest`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `spaceId` |  |
+
+#### `NodesAddressesBySpaceResponse`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `nodeAddresses` |  |
+
+#### `Tree`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `id` |  |
+| 2 | `repeated string` | `heads` |  |
+
+#### `TreeParamsRequest`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `spaceId` |  |
+| 2 | `repeated string` | `documentId` |  |
+
+#### `TreeParamsResponse`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `rootId` |  |
+| 2 | `repeated string` | `headIds` |  |
+
+
+### any-sync-node/nodesync/nodesyncproto/protos/nodesync.proto
+
+#### `AdoptArchiveRequest`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `spaceId` |  |
+| 2 | `repeated string` | `srcKey` | srcKey is the full key of the gzipped snapshot within the shared bucket (sender's prefix) |
+| 3 | `repeated string` | `oldHash` | heads hashes of the space at snapshot time, as stored in the sender's index |
+| 4 | `repeated string` | `newHash` |  |
+| 5 | `repeated bool` | `eager` | eager asks the receiver to restore the space in background right away |
+| 6 | `repeated int64` | `compressedSize` |  |
+| 7 | `repeated int64` | `uncompressedSize` |  |
+
+#### `AdoptArchiveResponse`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated AdoptArchiveResult` | `result` |  |
+
+#### `ColdSyncRequest`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `spaceId` |  |
+| 2 | `repeated ColdSyncProtocolType` | `protocolType` |  |
+
+#### `ColdSyncResponse`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 2 | `repeated string` | `filename` |  |
+| 3 | `repeated bytes` | `data` |  |
+| 4 | `repeated uint32` | `crc32` |  |
+| 5 | `repeated ColdSyncProtocolType` | `protocolType` |  |
+
+#### `PartitionSyncRange`
+
+> PartitionSyncRange presenting a request for one range
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated uint64` | `from` |  |
+| 2 | `repeated uint64` | `to` |  |
+| 3 | `repeated uint32` | `limit` |  |
+| 4 | `repeated bool` | `elements` |  |
+
+#### `PartitionSyncRequest`
+
+> HeadSyncRequest is a request for HeadSync
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated uint64` | `partitionId` |  |
+| 2 | `repeated PartitionSyncRange` | `ranges` |  |
+
+#### `PartitionSyncResponse`
+
+> PartitionSyncResponse is a response for HeadSync
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated PartitionSyncResult` | `results` |  |
+
+#### `PartitionSyncResult`
+
+> PartitionSyncResult presenting a response for one range
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated bytes` | `hash` |  |
+| 2 | `repeated PartitionSyncResultElement` | `elements` |  |
+| 3 | `repeated uint32` | `count` |  |
+
+#### `PartitionSyncResultElement`
+
+> PartitionSyncResultElement presenting state of one object
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `id` |  |
+| 2 | `repeated string` | `head` |  |
+
+
+### any-sync/commonfile/fileproto/filep2p/protos/filep2p.proto
+
+#### `FileAvailability`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated bytes` | `rootCid` |  |
+| 2 | `repeated Availability` | `have` |  |
+
+#### `FileCheckRequest`
+
+> ---- FileCheck (availability) ---------------------------------------------
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `spaceId` |  |
+| 2 | `repeated bytes` | `rootCids` |  |
+
+#### `FileCheckResponse`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated FileAvailability` | `files` |  |
+
+#### `ObjectReadRequest`
+
+> ---- ObjectRead (ranged CAR bytes) ----------------------------------------
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `spaceId` |  |
+| 2 | `repeated bytes` | `rootCid` |  |
+| 3 | `repeated uint64` | `offset` |  |
+| 4 | `repeated uint32` | `length` |  |
+
+#### `ObjectReadResponse`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated bytes` | `data` |  |
+| 2 | `repeated uint64` | `totalSize` |  |
+
+
+### any-sync/commonfile/fileproto/fileprotov2/protos/filev2.proto
+
+#### `InfoRequest`
+
+> ---- Info (node-level metadata) --------------------------------------------- InfoRequest is deliberately empty: Info is static node metadata, extensible later (capabilities, limits) without a wire break.
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+
+#### `InfoResponse`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `publicReadBaseUrl` | publicReadBaseUrl, when non-empty, lets clients construct durable object URLs as {publicReadBaseUrl}/blob/{spaceId}/{rootCid} with zero broker round-trips; clients cache it. Empty = no public read: use RequestDownload. |
+
+#### `NetworkSignReceipt`
+
+> NetworkSignReceipt mirrors coordinator SpaceReceiptWithSignature: an opaque protobuf-encoded payload plus the network-key signature over it. The payload schema is intentionally not defined here (opaque blob forwarded verbatim).
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated bytes` | `receiptPayload` |  |
+| 2 | `repeated bytes` | `signature` |  |
+
+#### `PresignField`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `key` |  |
+| 2 | `repeated string` | `value` |  |
+
+#### `PresignedUpload`
+
+> PresignedUpload is an OPAQUE presigned upload target. No S3 vendor structs leak into the shared proto: the client POSTs `fields` + the object body to `url` verbatim. Modeled as a presigned POST form (fields are ordered key/value pairs rather than a map) so the signing order is deterministic and reproducible.
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `url` |  |
+| 2 | `repeated PresignField` | `fields` |  |
+| 3 | `repeated uint64` | `maxContentLength` |  |
+| 4 | `repeated int64` | `expiry` |  |
+
+#### `RequestDownloadRequest`
+
+> ---- RequestDownload ------------------------------------------------------
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `spaceId` |  |
+| 2 | `repeated bytes` | `rootCids` |  |
+
+#### `RequestDownloadResponse`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated RequestDownloadResult` | `results` |  |
+
+#### `RequestDownloadResult`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated bytes` | `rootCid` |  |
+| 2 | `repeated ErrCode` | `code` |  |
+| 3 | `repeated SignedDownload` | `download` |  |
+
+#### `RequestSignRequest`
+
+> ---- RequestSign ----------------------------------------------------------
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated string` | `spaceId` |  |
+| 2 | `repeated bytes` | `rootCids` |  |
+
+#### `RequestSignResponse`
+
+| # | 类型 | 字段 | 说明 |
+|---|---|---|---|
+| 1 | `repeated RequestSignResult` | `results` |  |
+

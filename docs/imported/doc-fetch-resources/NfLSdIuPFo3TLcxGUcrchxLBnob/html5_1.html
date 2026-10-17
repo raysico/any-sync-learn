@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="use-iframe" content="true">
+<meta name="html-box-height-mode" content="auto">
+<meta name="description" content="any-sync 保险库（Vault）密钥派生关系图，中文标注版，源码可编辑">
+<title>any-sync 密钥派生示意图（中文标注）</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { margin: 0; background: #f7f8fa; }
+  .root {
+    width: 100%; max-width: 100%; box-sizing: border-box;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    color: #1f2329; padding: 16px 12px;
+  }
+  .caption { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
+  .sub { font-size: 12px; color: #646a73; margin-bottom: 14px; }
+  /* 区块 */
+  .section {
+    background: #fff; border: 1px solid #dee0e3; border-radius: 10px;
+    padding: 12px 12px 14px; margin-bottom: 12px;
+  }
+  .section-title { font-size: 13px; font-weight: 700; color: #3370ff; margin-bottom: 10px; }
+  .flow { display: flex; align-items: stretch; flex-wrap: wrap; gap: 8px; }
+  /* 节点卡片 */
+  .node {
+    background: #f2f3f5; border: 1px solid #c9cdd4; border-radius: 8px;
+    padding: 8px 10px; min-width: 120px; flex: 0 1 auto;
+  }
+  .node.source { background: #fff7e6; border-color: #ffd666; }
+  .node.key { background: #eef3ff; border-color: #85a5ff; }
+  .node.derived { background: #f0f5ff; border-color: #b7c9f2; }
+  .node .en { font-weight: 700; font-size: 13px; }
+  .node .zh { font-size: 12px; color: #4e5969; margin-top: 2px; }
+  .node .algo {
+    display: inline-block; font-size: 11px; background: #fff; border: 1px solid #c9cdd4;
+    border-radius: 4px; padding: 0 5px; margin-top: 5px; color: #3370ff; font-family: ui-monospace, monospace;
+  }
+  .node .use { font-size: 11px; color: #8f959e; margin-top: 5px; line-height: 1.45; }
+  /* 箭头 */
+  .arrow { align-self: center; color: #8f959e; font-size: 15px; white-space: nowrap; }
+  .arrow b { color: #3370ff; font-size: 11px; font-weight: 600; display: block; text-align: center; }
+  /* 分组小标签 */
+  .branch { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .branch-label { font-size: 11px; color: #646a73; background: #f2f3f5; border-radius: 4px; padding: 2px 6px; }
+</style>
+</head>
+<body>
+<div class="root">
+  <div class="caption">保险库（Vault）密钥派生示意图</div>
+  <div class="sub">由 BIP-39 助记词离线派生全部密钥；对照官方《Access control and Encryption》Vault Inception 一节</div>
+
+  <!-- 区块 A：助记词派生 -->
+  <div class="section">
+    <div class="section-title">A · 助记词派生（SLIP10）</div>
+    <div class="flow">
+      <div class="node source">
+        <div class="en">Seed Phrase</div>
+        <div class="zh">助记词（BIP-39，12 词）</div>
+        <span class="algo">BIP-39</span>
+        <div class="use">全程离线；私钥永不离开设备</div>
+      </div>
+      <div class="arrow">➜<b>SLIP10</b></div>
+      <div class="node key">
+        <div class="en">Master Key</div>
+        <div class="zh">主密钥</div>
+        <span class="algo">Ed25519</span>
+        <div class="use">签名/认证 ACL 记录中的身份；必要时恢复身份</div>
+      </div>
+      <div class="arrow">➜<b>SLIP10</b></div>
+      <div class="node key">
+        <div class="en">Identity Key</div>
+        <div class="zh">身份密钥</div>
+        <span class="algo">Ed25519</span>
+        <div class="use">保险库所有者的公钥身份；在 ACL 记录中签署空间头</div>
+      </div>
+      <div class="arrow">➜<b>SLIP10</b></div>
+      <div class="node key">
+        <div class="en">Ethereum Key</div>
+        <div class="zh">以太坊密钥</div>
+        <span class="algo">ECDSA</span>
+        <div class="use">签署以太坊交易，供 Any 命名系统（ANS）按需使用</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 区块 B：随机派生 -->
+  <div class="section">
+    <div class="section-title">B · 随机派生（与助记词无关）</div>
+    <div class="flow">
+      <div class="node source">
+        <div class="en">Random Function</div>
+        <div class="zh">随机函数</div>
+        <div class="use">Vault 创建时生成</div>
+      </div>
+      <div class="arrow">➜</div>
+      <div class="node key">
+        <div class="en">Device Key (Peer Id)</div>
+        <div class="zh">设备密钥 / 对等密钥</div>
+        <span class="algo">Ed25519</span>
+        <div class="use">作为托管网络中的 Peer ID；负责 P2P 握手（DH 与 Anytype 握手）</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 区块 C：身份派生 -->
+  <div class="section">
+    <div class="section-title">C · 由身份密钥进一步派生</div>
+    <div class="flow">
+      <div class="node key">
+        <div class="en">Identity Key</div>
+        <div class="zh">身份密钥</div>
+        <span class="algo">Ed25519</span>
+        <div class="use">（上一区块所派生）</div>
+      </div>
+      <div class="arrow">➜<b>HASH(公钥)</b></div>
+      <div class="node derived">
+        <div class="en">Replication Key</div>
+        <div class="zh">复制密钥</div>
+        <div class="use">一致性哈希：决定哪些同步节点承载该空间（负载均衡/分区）</div>
+      </div>
+      <div class="arrow">➜<b>SLIP21</b></div>
+      <div class="node derived">
+        <div class="en">Account Metadata Key</div>
+        <div class="zh">账户元数据密钥</div>
+        <span class="algo">AES</span>
+        <div class="use">加密 ACL 记录中的身份元数据</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sub" style="margin-bottom:0;">术语以英文原词为准；本图为代码绘制的可编辑示意，修改源码即可更新。</div>
+</div>
+</body>
+</html>

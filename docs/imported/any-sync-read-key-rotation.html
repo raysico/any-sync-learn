@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="use-iframe" content="true">
+<meta name="html-box-height-mode" content="auto">
+<meta name="description" content="any-sync 读取密钥（Read Key）轮换流程示意图，中文标注版，源码可编辑">
+<title>读取密钥轮换示意图（中文标注）</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { margin: 0; background: #f7f8fa; }
+  .root {
+    width: 100%; max-width: 100%; box-sizing: border-box;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    color: #1f2329; padding: 16px 12px;
+  }
+  .caption { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
+  .sub { font-size: 12px; color: #646a73; margin-bottom: 14px; }
+  /* 密钥流区块 */
+  .flow-section {
+    background: #fff; border: 1px solid #dee0e3; border-radius: 10px;
+    padding: 12px; margin-bottom: 12px;
+  }
+  .flow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .node {
+    background: #f2f3f5; border: 1px solid #c9cdd4; border-radius: 8px;
+    padding: 8px 10px; min-width: 130px; flex: 0 1 auto;
+  }
+  .node.obj { background: #fff7e6; border-color: #ffd666; }
+  .node.key { background: #eef3ff; border-color: #85a5ff; }
+  .node.rotation { background: #ffece8; border-color: #f58a83; }
+  .node .en { font-weight: 700; font-size: 13px; }
+  .node .zh { font-size: 12px; color: #4e5969; margin-top: 2px; }
+  .node .algo {
+    display: inline-block; font-size: 11px; background: #fff; border: 1px solid #c9cdd4;
+    border-radius: 4px; padding: 0 5px; margin-top: 5px; color: #3370ff; font-family: ui-monospace, monospace;
+  }
+  .node .use { font-size: 11px; color: #8f959e; margin-top: 5px; line-height: 1.45; }
+  .arrow { align-self: center; color: #8f959e; font-size: 15px; white-space: nowrap; }
+  .arrow b { color: #3370ff; font-size: 11px; font-weight: 600; display: block; text-align: center; }
+  /* ACL 记录三列 */
+  .acl-section { display: flex; gap: 10px; flex-wrap: wrap; }
+  .acl-card {
+    flex: 1 1 200px; background: #fff; border: 1px solid #dee0e3; border-radius: 10px;
+    padding: 10px 12px; border-top: 3px solid #3370ff;
+  }
+  .acl-card.n1 { border-top-color: #f7a600; }
+  .acl-card.n2 { border-top-color: #52c41a; }
+  .acl-title { font-size: 13px; font-weight: 700; color: #1f2329; margin-bottom: 2px; }
+  .acl-op { font-size: 12px; color: #3370ff; margin-bottom: 8px; font-weight: 600; }
+  .acl-op.remove { color: #e5484d; }
+  .acl-op.add { color: #52c41a; }
+  .keyline {
+    display: flex; align-items: baseline; gap: 6px; font-size: 12px; color: #4e5969;
+    border: 1px dashed #c9cdd4; border-radius: 6px; padding: 5px 8px; margin-bottom: 6px; background: #fafbfc;
+  }
+  .keyline b { font-family: ui-monospace, monospace; color: #1f2329; }
+  .members { font-size: 11px; color: #646a73; }
+  .members span {
+    display: inline-block; background: #eef3ff; border-radius: 4px; padding: 1px 6px; margin: 2px 4px 0 0;
+  }
+  .members span.removed { background: #ffece8; color: #e5484d; text-decoration: line-through; }
+  .members span.added { background: #e8f7ec; color: #389e0d; }
+  .legend { font-size: 11px; color: #8f959e; margin-top: 10px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="root">
+  <div class="caption">读取密钥（Read Key）轮换流程示意图</div>
+  <div class="sub">新增/移除成员时轮换对称读取密钥，并逐条追加 ACL 记录；对照官方《Access control and Encryption》ACL and Encryption 一节</div>
+
+  <!-- 密钥流 -->
+  <div class="flow-section">
+    <div class="flow">
+      <div class="node obj">
+        <div class="en">Sym Obj</div>
+        <div class="zh">对称对象</div>
+        <div class="use">按对象 ID 进行路径派生（Path derivation based on Id）</div>
+      </div>
+      <div class="arrow">➜</div>
+      <div class="node key">
+        <div class="en">Read Key M</div>
+        <div class="zh">读取密钥（对称）</div>
+        <span class="algo">AES</span>
+        <div class="use">加密空间/对象/变更的对称密钥（当前版本）</div>
+      </div>
+      <div class="arrow">➜<b>Encrypts previous key<br>（加密旧密钥，形成加密链）</b></div>
+      <div class="node rotation">
+        <div class="en">READ KEY ROTATION</div>
+        <div class="zh">读取密钥轮换</div>
+        <div class="use">新密钥 M+1 加密旧密钥 M；授权成员可凭新密钥解密全部历史</div>
+      </div>
+      <div class="arrow">➜</div>
+      <div class="node key">
+        <div class="en">Read Key M+1</div>
+        <div class="zh">读取密钥（对称，新）</div>
+        <span class="algo">AES</span>
+        <div class="use">轮换后的新读取密钥</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ACL 记录三列 -->
+  <div class="acl-section">
+    <div class="acl-card">
+      <div class="acl-title">ACL Record N</div>
+      <div class="acl-op">当前状态</div>
+      <div class="keyline"><b>Read Key M</b> 加密给：</div>
+      <div class="members"><span>用户 A 公钥</span><span>用户 B 公钥</span></div>
+    </div>
+    <div class="acl-card n1">
+      <div class="acl-title">ACL Record N+1</div>
+      <div class="acl-op remove">移除用户 B</div>
+      <div class="keyline"><b>Read Key M+1</b> 加密给：</div>
+      <div class="members"><span>用户 A 公钥</span><span class="removed">用户 B 公钥</span></div>
+    </div>
+    <div class="acl-card n2">
+      <div class="acl-title">ACL Record N+2</div>
+      <div class="acl-op add">添加用户 C</div>
+      <div class="keyline"><b>Read Key M+1</b> 加密给：</div>
+      <div class="members"><span>用户 A 公钥</span><span class="added">用户 C 公钥</span></div>
+    </div>
+  </div>
+
+  <div class="legend">
+    读图顺序：对象密钥由空间当前对称密钥（Read Key）与对象 CID 派生 → 空间密钥为每个当前成员分别加密 → 密钥轮换时新密钥加密旧密钥，形成加密链，授权成员可解密完整历史。<br>
+    术语以英文原词为准；本图为代码绘制的可编辑示意，修改源码即可更新。
+  </div>
+</div>
+</body>
+</html>

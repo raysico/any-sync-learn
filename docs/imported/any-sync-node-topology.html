@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="use-iframe" content="true">
+<meta name="html-box-height-mode" content="auto">
+<meta name="description" content="any-sync 基础设施节点拓扑与数据流示意图，中文标注版，源码可编辑">
+<title>any-sync 节点拓扑示意图（中文标注）</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { margin: 0; background: #f7f8fa; }
+  .root {
+    width: 100%; max-width: 100%; box-sizing: border-box;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    color: #1f2329; padding: 16px 12px;
+  }
+  .caption { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
+  .sub { font-size: 12px; color: #646a73; margin-bottom: 14px; }
+  .layout { display: flex; flex-wrap: wrap; gap: 12px; }
+  /* 左：客户端与频道 */
+  .col { display: flex; flex-direction: column; gap: 10px; flex: 0 0 auto; }
+  .box {
+    background: #fff; border: 1.5px solid #3370ff; border-radius: 10px;
+    padding: 10px 14px; min-width: 150px; text-align: center;
+  }
+  .box.gray { border-color: #c9cdd4; background: #f2f3f5; }
+  .box.orange { border-color: #f7a600; background: #fff7e6; }
+  .box.green { border-color: #52c41a; background: #f0f9f1; }
+  .box.red { border-color: #e5484d; background: #fff1f0; }
+  .box .en { font-weight: 700; font-size: 13px; }
+  .box .zh { font-size: 12px; color: #4e5969; margin-top: 2px; }
+  .box .note { font-size: 11px; color: #8f959e; margin-top: 4px; line-height: 1.4; }
+  /* 中部：频道由同步节点管理 */
+  .mid { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 6px; }
+  .edge { font-size: 11px; color: #646a73; text-align: center; line-height: 1.5; }
+  .edge b { color: #3370ff; }
+  .vline { width: 2px; height: 26px; background: #c9cdd4; }
+  /* 右：基础设施节点列 */
+  .infra { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; flex: 1 1 360px; }
+  .legend { font-size: 11px; color: #8f959e; margin-top: 12px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="root">
+  <div class="caption">基础设施节点拓扑与数据流</div>
+  <div class="sub">四种节点（协调 / 同步 / 文件 / 共识）+ 客户端与频道；对照官方《Networking and Infrastructure》Node Types 一节</div>
+
+  <div class="layout">
+    <!-- 左列：客户端与频道 -->
+    <div class="col">
+      <div class="box gray">
+        <div class="en">Client</div>
+        <div class="zh">客户端（你的设备）</div>
+        <div class="note">轻量连接，不跑完整 DHT</div>
+      </div>
+      <div class="edge">subscribes for updates<br><b>订阅更新 / 推送变更</b></div>
+      <div class="box orange">
+        <div class="en">Channel</div>
+        <div class="zh">频道 / 空间</div>
+        <div class="note">加密 DAG；成员由 ACL 决定</div>
+      </div>
+    </div>
+
+    <!-- 中间：频道由同步节点管理 -->
+    <div class="mid">
+      <div class="vline"></div>
+      <div class="edge">is managed by<br><b>由同步节点管理</b></div>
+      <div class="vline"></div>
+    </div>
+
+    <!-- 右列：基础设施 -->
+    <div class="infra">
+      <div class="box">
+        <div class="en">Coordinator node</div>
+        <div class="zh">协调节点</div>
+        <div class="note">拓扑与路由：分发子网配置；频道 ID → 同步节点（一致性哈希）；签署频道头</div>
+      </div>
+      <div class="box red">
+        <div class="en">Consensus node</div>
+        <div class="zh">共识节点</div>
+        <div class="note">验证更新的 ACL（RAFT）；以网络密钥签名后传播回同步节点</div>
+      </div>
+      <div class="box">
+        <div class="en">Sync node</div>
+        <div class="zh">同步节点</div>
+        <div class="note">存储与交换频道数据；常在线对等体；每个频道多个副本</div>
+      </div>
+      <div class="box green">
+        <div class="en">File node</div>
+        <div class="zh">文件节点</div>
+        <div class="note">基于 IPLD 存储/检索二进制文件；授权后供应数据</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    交互路径：客户端 → 协调节点（获取节点/副本地址）→ 同步节点（订阅更新）；客户端 → 文件节点（检索文件）；同步节点 → 共识节点（提交 ACL 变更）→ 验证后回传。图中内容为代码绘制的可编辑示意，修改源码即可更新。
+  </div>
+</div>
+</body>
+</html>

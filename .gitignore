@@ -5,3 +5,9 @@ research/
 node_modules/
 dist/
 .env
+
+# 第三方源码克隆（各自独立 git 仓库，不纳入本仓库版本控制）
+src/
+
+# 运行中的 any-sync 网络（含私有配置与数据，绝不入库）
+compose/
