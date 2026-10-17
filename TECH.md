@@ -123,13 +123,22 @@ GOPRIVATE   =  github.com/anyproto
 
 ### 3.3 健康判据
 
-唯一权威判据是 netcheck：
+唯一权威判据是 netcheck。注意两点：日志里 `netcheck` 与 `success` 之间是**制表符**而非空格；容器健康检查读的是容器内 `/tmp/netcheck-last.log`。
 
 ```bash
-docker logs --tail 5 any-sync-dockercompose-netcheck-1 | grep -c "netcheck success"
+# 方式一：直接看健康状态（最省事，官方 compose 的 healthcheck 就是判它）
+docker inspect any-sync-dockercompose-netcheck-1 --format '{{.State.Health.Status}} {{.State.Health.FailingStreak}}'
+# 预期输出：healthy 0
+
+# 方式二：统计日志中的成功次数（用 [[:space:]] 兼容制表符）
+docker logs any-sync-dockercompose-netcheck-1 2>&1 | grep -cE "netcheck[[:space:]]+success"
 ```
 
-所有服务 `Up` 且 netcheck 输出 `netcheck success` 即健康。
+所有服务 `Up` 且 netcheck 为 `healthy`（`FailingStreak: 0`）即健康。compose 内置的健康检查命令为：
+
+```
+grep -qE 'netcheck\s+success' /tmp/netcheck-last.log
+```
 
 ---
 
