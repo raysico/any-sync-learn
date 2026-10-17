@@ -315,3 +315,70 @@ grep -qE 'netcheck\s+success' /tmp/netcheck-last.log
 | 2 | 库（library）与 `listLibrary` | 对标 Anytype Channel，下一轮实现 |
 | 3 | 历史记录是否服务端加密 | 当前为明文 JSONL，仅靠文件权限保护 |
 
+
+---
+
+## 8. any-sync-admin（运维视角客户端）
+
+> 实现位置：\`test/tools/any-sync-admin/\`（只读观测工具，按约定不入库）
+> 启动：\`./bin/any-sync-admin -addr 0.0.0.0:8790 -network <nodes.yml> -logs "<来源>=<位置>,..." [-online-ttl 2m]\`
+> 方案：\`20261017 17:35-01 · 日志证据驱动\`
+
+### 8.1 数据口径（只读）
+
+| 面板 | 证据来源 | 判定 |
+| --- | --- | --- |
+| 网络配置 | \`nodes.yml\` | 每次请求实时读取；节点标签 tree→node-1..n，其余用类型名 |
+| 节点在线 | 主动 TCP 探测节点地址（300ms 超时） | 建连成功即在线 |
+| 链路矩阵 | 日志里的 \`rpcLog\`\`{peerId}\` | 来源节点日志出现某 peerId 的 RPC → 该来源节点 → 对方 的边 |
+| 已握手用户 | \`rpcLog\`\`{peerId, identity}\` | 按 \`identity\` 聚合，同一身份多设备合并 |
+| 在线/离线 | 最近事件时间 + \`-online-ttl\` | 超过 TTL 无新事件即离线 |
+| 入站握手尝试 | \`incoming connection handshake error\` / \`drpc serve peer\` | 按来源计数，反映“有外部连接打进来” |
+
+**已知限制（诚实口径）**
+
+1. any-sync 的节点间互连、以及“仅完成握手不发 RPC”的客户端，**默认日志级别下不留痕**；只有真正发过 RPC 的参与者才会出现在用户列表里。
+2. 节点 HTTP 观测口（\`apiServer\`）在 any-sync-node v0.13.1 中**未启动**，metric 端口只有 \`anysync_versions\`，因此不依赖它们。
+3. 因此若要“看到所有握手”，只能在节点侧提高日志级别（会污染正常日志），或后续给 secureservice 增加计数器（需重建节点）。
+
+### 8.2 日志来源（为远端部署预留）
+
+\`-logs\` 接受逗号分隔条目，支持三种写法：
+
+| 写法 | 示例 |
+| --- | --- |
+| 本地文件 | \`node-1=/abs/path/node-1.log\` |
+| 远程 HTTP | \`node-1=http://10.0.0.5:9100/logs/node-1.log\`（换行用 \`key@url\` 亦可） |
+| 目录 | \`/abs/path/logs\`（自动扫描 \`*.log\`，同名来源保留最新文件） |
+
+远端采集要求：返回体是日志原文；支持 \`Range\` 时走增量，否则每次全量读取（建议远端用支持 Range 的静态文件服务）。
+
+### 8.3 接口
+
+#### GET /api/overview
+
+一次请求返回完整快照。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| at | string | 快照时间 |
+| network | object | 同 userdomain-web 的 \`/api/network\`，节点额外带 \`label\` / \`online\` / \`latencyMs\` / \`probeErr\` / \`rpcCount\` |
+| nodesOnline / nodesTotal | int | 探测结果统计 |
+| edges[] | array | \`{fromPeer, toPeer, lastAt}\`，有 RPC 证据的边 |
+| users[] | array | \`{identity, peerIds[], firstSeen, lastSeen, online, rpcCount, lastRpc, seenBy[], kind(\\"client\\"|\\"network-node\\"|\\"mixed\\")}\` |
+| onlineUsers / offlineUsers | int | 用户在线/离线统计 |
+| logSources[] | array | \`{key, label, loc, remote, staleSeconds, lastError}\` |
+| peerCloses | object | 最近关闭的 peerId → 时间（未识别身份的） |
+| tlsAttempts | object | 来源 → 入站握手尝试次数 |
+| lastTlsAt | object | 来源 → 最近一次入站握手时间 |
+| onlineTtlSeconds | int | 在线判定 TTL |
+| warnings | string[] | 配置读取失败等 |
+
+#### GET /api/health
+
+\`{ok: bool, uptimeSeconds: int}\`
+
+### 8.4 验收
+
+见 \`test-scenarios/any-sync-admin.md\`。
+
