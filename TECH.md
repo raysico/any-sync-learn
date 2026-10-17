@@ -202,7 +202,79 @@ wire 码 = 区间基准 + 本地码；两组撞码会导致进程启动 panic。
 
 ---
 
-## 9. 排障时最容易踩的坑
+## 9. 空间内对象写入与自举（20261017 22:45-01 已实施）
+
+本节记录**用户域 → 库 → 信息对象**的落地模型，以及写入链路上三个必须避开的坑。全部结论来自本地网络实测（2 库 4 信息对象，主/副本双实例回归）。
+
+### 9.1 数据模型
+
+```
+SpaceHeaderPayload = {v, spaceType:"userdomain",
+                      registry:{changeType, changePayload, parentId}}
+        │ 确定性推导（派生根：ID 只由 spaceId + 参数决定）
+        ▼
+库注册表树（派生根）── 变更 ──▶ 每次新建库追加一条 {op:add, libId, name}
+        │
+        ▼
+库树（派生根，ID = f(spaceId, 库名)）── 变更 ──▶ {op:addInfo, infoId}
+        │
+        ▼
+信息对象（独立根，载荷含 lib=<库树 ID>，内容用 ReadKey 加密）
+```
+
+| 层 | 可变性 | 说明 |
+| --- | --- | --- |
+| SpaceHeaderPayload | **不可变**（签名 + spaceId 由它算出） | 只放“注册表推导描述”，不放字面 ID，避免循环依赖 |
+| 注册表树 / 库树 | 可追加变更 | 用**派生根**才能被节点接受追加（实测：签名根追加会被拒） |
+| 信息对象 | 各自独立根 | 内容密文；`lib` 属性表达归属 |
+
+### 9.2 新设备自举流程
+
+```
+助记词 → 账户密钥
+      → 协调节点 NetworkConfiguration
+      → SpacePull(spaceId) 得到 spaceHeaderPayload
+      → 推导 registryId
+      → 拉注册表树全部变更 → 库 ID 列表
+      → 逐库拉库树变更 → 字段定义 + 信息对象 ID
+      → 逐对象拉根 → ReadKey 解密 → 本地重建
+```
+
+接口：`GET /api/domain/libraries?mnemonic=…`，返回库、字段与信息对象。
+
+### 9.3 三个必须避开的坑（本轮实测）
+
+| # | 坑 | 正确做法 |
+| --- | --- | --- |
+| 1 | 推送变更时把 **变更 ID** 当作 `ObjectSyncMessage.objectId` | 必须是**树 ID**，否则节点当成未知新对象，变更永远不落盘 |
+| 2 | 把整条 `RawTreeChange` 当密文解密 | 先解 `RawTreeChange → TreeChange`，再解 `TreeChange.changesData` |
+| 3 | 用**签名根**的树追加变更 | 实测被节点拒绝；改用**派生根**（`BuildDerivedRoot`）后追加成功 |
+
+追加变更时 `BuilderContent` 的必备字段（对齐 anytype-heart 的 `prepareBuilderContent`）：
+
+```go
+BuilderContent{
+    TreeHeadIds:    heads,              // 从网络拉到的当前 heads
+    AclHeadId:      aclHead,            // SpacePull 的 ACL 头
+    SnapshotBaseId: root.GetId(),       // 树根 ID（漏了会重建失败）
+    ReadKeyId:      firstAclRecordId,   // 读密钥引入记录（漏了节点无法校验）
+    PrivKey:        signKey,
+    ReadKey:        spaceReadKey,
+    Content:        plaintext,          // 明文，由 builder 加密（不要自己先加密）
+    Timestamp:      now,
+}
+```
+
+### 9.4 验收判据
+
+| 项 | 预期 |
+| --- | --- |
+| 注册表树变更数 | 根 + 每个库一条 |
+| 每条库登记变更 | `snapshotBaseId = 根`、`prevIds` 指向上一 head |
+| 自举结果 | 库数、字段数、信息对象数与写入一致 |
+| 副本实例 | 仅凭助记词得到相同结果（不依赖本地索引） |
+
+## 10. 排障时最容易踩的坑
 
 | 现象 | 真实原因 |
 | --- | --- |
