@@ -178,3 +178,140 @@ grep -qE 'netcheck\s+success' /tmp/netcheck-last.log
 | 节点拓扑可视化 | `docs/imported/any-sync-node-topology.html` |
 | proto 解析/文档生成工具 | `docs/imported/tools/` |
 | 技术文档中文导入（Feishu） | `docs/imported/.feishu_import/` |
+
+---
+
+## 7. userDomain Web 客户端（用户域登录与历史）
+
+> 实现位置：`test/tools/userdomain-web/`（本地调试工具，按约定留在 `test/`，不入库）
+> 启动：`./bin/userdomain-web -addr 0.0.0.0:8787 -network <nodes.yml> [-store data/userdomains.jsonl]`
+
+### 7.1 术语与边界
+
+| 术语 | 定义 | 对标 Anytype |
+| --- | --- | --- |
+| **用户域（userDomain）** | 由助记词在本机离线派生出的一组密钥身份；是「登录」与权限的主体 | 账户 / Vault |
+| **库（library）** | 用户在用户域下自己管理、可列出的资源单元（本轮不实现） | Channel / Space |
+| **登录** | 与网络完成握手，证明密钥被该网络受理 | 客户端连接 any-sync 网络 |
+| **网络配置** | `nodes.yml`/`client.yml`，决定连哪个网络；**不参与密钥派生** | Subnet Configuration |
+
+### 7.2 密钥边界
+
+- 助记词（12 词）用 `crypto/rand` 在本机生成，**不参与任何上传**；网络只收到签名。
+- 派生：`m/44'/2046'/<index>'`（master）、`m/44'/2046'/<index>'/0'`（signing/身份）、`m/44'/60'/0'/0/<index>`（Ethereum）。
+- 助记词是唯一真源：同一助记词 + 同一 index → 同一账户 ID；导入记录时一律按助记词重新派生账户 ID，忽略文件中的 `accountId`。
+- 历史记录保存于本机 JSON Lines 文件（默认 `data/userdomains.jsonl`，权限 0600），内含助记词，属于敏感文件。
+
+### 7.3 接口清单
+
+统一前缀：`http://<host>:8787`；请求与响应均为 `application/json; charset=utf-8`；错误统一为 `{"error": "<中文说明>"}`。
+
+#### GET /api/network —— 读取当前网络配置
+
+请求参数：无。响应字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| path | string | 网络配置文件绝对路径 |
+| networkId | string | 网络 ID；`nodes.yml` 中为空时回退为配置 id |
+| configurationId | string | 配置 ID（anyconf 的 `id`） |
+| loadedAt | string(RFC3339) | 本次读取时间 |
+| coordinator | string | coordinator 的 TCP 地址（首个非 `quic://` 地址） |
+| nodes[].peerId | string | 节点 peerId |
+| nodes[].types | string[] | `tree` / `coordinator` / `file` / `consensus` |
+| nodes[].addresses | string[] | 地址列表 |
+
+错误：500（配置文件不可读 / YAML 非法 / 无任何节点）。
+
+#### POST /api/userdomain —— 生成用户域并登录
+
+| 项 | 内容 |
+| --- | --- |
+| 请求体 | `{"index": 0}`（可选，省略按 0 处理） |
+| 行为 | 本机生成 12 词助记词 → 派生密钥 → 与 coordinator 握手 → 写入历史记录 |
+| 响应 | userDomain 对象（见 7.4） |
+| 错误 | 500（生成助记词失败 / 网络配置不可读） |
+
+#### POST /api/login —— 用已有助记词登录
+
+| 项 | 内容 |
+| --- | --- |
+| 请求体 | `{"mnemonic": "<12 词>", "index": 0}` |
+| 行为 | 校验助记词 → 派生同一用户域 → 与 coordinator 握手 → 以账户 ID 合并写入历史 |
+| 响应 | userDomain 对象（见 7.4） |
+| 错误 | 400（请求体非合法 JSON / 助记词词数、拼写或校验和不对）；500（网络配置不可读） |
+
+> 握手失败**不是** HTTP 错误：返回 200，结果体现在 `login.ok=false` 与 `login.error`，便于前端展示「已生成、但连不上」。
+
+#### GET /api/userdomains —— 历史列表
+
+请求参数：无。响应：userDomain 对象数组，按 `createdAt` 倒序。错误：500（历史文件不可读）。
+
+#### GET /api/userdomains/export —— 导出全部历史
+
+| 项 | 内容 |
+| --- | --- |
+| 请求参数 | 无 |
+| 响应头 | `Content-Type: application/json`；`Content-Disposition: attachment; filename="userdomain-export-YYYYMMDD-HHMMSS.json"` |
+| 响应体 | userDomain 对象数组 |
+| 错误 | 500 |
+
+> 前端用 `fetch + Blob + <a download>` 触发下载，不依赖顶层导航。
+
+#### POST /api/userdomains/import —— 导入历史
+
+| 项 | 内容 |
+| --- | --- |
+| 请求体 | userDomain 对象**或**对象数组；上限 4 MB |
+| 行为 | 有助记词的记录按助记词重新派生 `accountId`，`id` 一律等于 `accountId`；同 id 覆盖、否则新增；助记词非法或缺字段的记录跳过 |
+| 响应 | `{"imported": <新增或覆盖条数>, "skipped": <跳过条数>}` |
+| 错误 | 400（请求体既不是合法数组也不是合法对象） |
+
+#### POST /api/userdomains/delete?id=<accountId> —— 删除历史记录
+
+| 项 | 内容 |
+| --- | --- |
+| 请求参数 | `id`（query，必填，账户 ID） |
+| 响应 | `{"deleted": "<accountId>"}` |
+| 错误 | 400（缺 id）；500（写入失败） |
+
+> 删除只影响本机历史文件，不影响该账户在网络上已有的任何数据。
+
+### 7.4 userDomain 对象
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| id | string | 用户域标识，等于 `accountId` |
+| mnemonic | string | 12 词助记词 |
+| accountId | string | 身份公钥账户 ID（`m/44'/2046'/i'/0'`） |
+| devicePeerId | string | 设备 peerId |
+| ethereumAddress | string | Ethereum 地址（ANS 用） |
+| derivation | string | 派生路径说明 |
+| networkId | string | 登录时所用网络的 ID |
+| networkPath | string | 网络配置文件路径 |
+| createdAt | string(RFC3339) | 生成时间 |
+| serverHost | string | 生成时的请求 Host |
+| keys.masterKeyBase64 | string | master key（protobuf 编码后 base64） |
+| keys.deviceKeyBase64 | string | device key |
+| keys.signingKeyBase64 | string | signing key |
+| keys.ethereumPrivateKeyHex | string | Ethereum 私钥 hex（**极高敏感**） |
+| login.ok | bool | 是否握手成功 |
+| login.addr | string | 握手目标地址 |
+| login.durationMs | int | 握手耗时 |
+| login.error | string | 失败原因（成功时省略） |
+| login.notes | string | 说明（含局域网补全地址信息） |
+
+### 7.5 登录判据
+
+- 握手链路：TCP → libp2p TLS 安全握手（`secureservice`）→ DRPC 协议握手（`handshakeproto.ProtoType_DRPC`）。
+- 目标：网络配置中的 coordinator；`login.ok=true` 表示该密钥被网络受理。
+- 局域网访问：服务监听 `0.0.0.0` 时，在**内存中**给每个节点追加本机私有网段地址（`10/8`、`172.16/12`、`192.168/16`），不改配置文件。
+
+### 7.6 后续待定
+
+| # | 待定 | 说明 |
+| --- | --- | --- |
+| 1 | 用户域 ⇄ 个人空间 ID 的确定性推导 | 官方用 v0 头部构造器 + 密钥推导；本客户端暂不创建空间，只认证身份 |
+| 2 | 库（library）与 `listLibrary` | 对标 Anytype Channel，下一轮实现 |
+| 3 | 历史记录是否服务端加密 | 当前为明文 JSONL，仅靠文件权限保护 |
+
