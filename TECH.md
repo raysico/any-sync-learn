@@ -430,3 +430,44 @@ ObjectSyncStream（常驻）
 | 订阅几秒后断流、节点日志 `peer close` / `stream removed` | 同一设备密钥（peerId）存在多条连接，被节点挤掉；每进程/每用途用独立 device key（见 9.11） |
 | 自举结果与本地列表对不上 | 助记词账户与用户域所有者不一致（见 9.5） |
 | 往已有树追加变更后 heads 不变 | 推送时 `objectId` 用了变更 ID，必须用树 ID（见 9.3） |
+
+## 11. 密钥体系（S1–S9）
+
+> 本节的**定义**按项目既定口径（用户确认版本）记录；"实现状态"列标注本客户端的落地情况。
+
+| 编号 | 名称 | 定义 | 实现状态 |
+| --- | --- | --- | --- |
+| **S1** | 助记词 | 12 词 BIP39。当前落盘保存，最终由用户自行保管，用于登录 | ✅ 已实现（落盘 `userdomains.jsonl`，0600；属过渡手段） |
+| **S2** | SLIP-10 主节点 MasterKey | 助记词 → `m/44'/2046'/i'`。用于派生全部账号密钥；作为 `MasterKey` 参与空间创建（写入 ACL 根并由其签名）；`accountKey` 即它的 base64 | ✅ 已修正：空间创建改传 SLIP-10 MasterKey（此前误传设备密钥） |
+| **S3** | 账号签名 key（Identity, Ed25519） | 主节点派生 `m/44'/2046'/i'/0'`。public → **Account() = 账号 ID**；作为 any-sync `SignKey` 签名空间 / ACL / 树操作；派生出账号元数据对称 key（见 S6） | ✅ 已实现 |
+| **S4** | 设备 / 对端 key（Ed25519） | 每个客户端随机、每库随机。`device.key` 用账号 key 加密落盘。public → **PeerId() = 设备网络身份**；作为 any-sync `PeerKey` 完成网络握手 / 对端身份 | ⚠️ 部分：已随机 + 按实例/用途持久化；**仍为明文 base64（0600），未用账号 key 加密** |
+| **S5** | Ethereum key（ECDSA/secp256k1） | 主节点派生 `m/44'/60'/0'/0/i`。签 Ethereum 交易 + **Any Naming Service**（.any 域名） | ✅ 已派生并展示地址 |
+| **S6** | 账号元数据对称 key（ProfileSymKey） | 由账号签名 key 经 SLIP-0021 路径 `m/SLIP-0021/anythinks/account/metadata` 派生。用于账号元数据的 E2EE（含 profile 对称 key），供换设备登录时解密 | ❌ 未实现（路径口径待确认，见下） |
+| **S7** | 用户域密钥 | (SignKey + MasterKey + SpaceType) 派生，用于空间加密与 CRDT 变更签名（any-sync commonspace 内部） | ⏳ **待补充**：下一轮由用户说明用户域存储方式后细化 |
+| **S8** | 会话 / app-link 密钥 | `WalletCreateSession` 随机生成，用于本地 API 授权 grant（app link） | ❌ 未实现（当前无本地 API 授权层） |
+| **S9** | localApiSecret（传输级） | 每次启动随机 32B，stdin 注入；用于授权 gRPC 引导调用，非派生密钥 | ❌ 未实现 |
+
+### 11.1 与源码的对照备注
+
+| 项 | 事实 | 影响 |
+| --- | --- | --- |
+| S2 与空间 ID | `spaceId = CID(RawSpaceHeader)`，头部含**随机 seed**、identity、spaceType 等；MasterKey 不进头部，只进 **ACL 根**（公钥 + 签名） | “MasterKey 参与空间 ID 派生”仅对 **Derive 空间**成立；普通 Create 空间不成立 |
+| S4 落盘 | heart：`accountKey.GetPublic().Encrypt(proto)` 后写文件 | 我们当前为明文 base64，需按此改进 |
+| S6 路径 | heart 现有常量为 `m/SLIP-0021/anytype/account/metadata`（`core/domain/account.go`）与 `m/SLIP-0021/anytype/space/key`（pushnotificationkeys） | 若需与 Anytype 共用账号元数据，路径须用 `anytype`；若为本项目自有命名，则按 `anythinks` 独立体系 |
+| S7 说明 | 普通空间 ReadKey 为随机 AES（heart: `crypto.NewAES()`）；派生空间（1-1 / tech）才由 identity+type+payload 确定性推导 | S7 的精确表述待下一轮补充 |
+
+### 11.2 设备密钥的使用规则（已实现）
+
+- 账户密钥来自助记词（S3），设备密钥**独立生成**并持久化；
+- 同一账户下按「实例 + 用途」分离：`device-<实例>.key`（业务连接）、`device-<实例>-sub.key`（实时订阅）；
+- 原因：同一 peerId 多连接会被节点关闭旧连接（详见 9.11）。
+
+### 11.3 待办
+
+| # | 待办 | 关联 |
+| --- | --- | --- |
+| 1 | 设备密钥改用账号公钥加密后落盘 | S4 |
+| 2 | 界面展示的 devicePeerId 与真实连接设备统一 | S4 |
+| 3 | 账号元数据对称 key 与 profile 加密 | S6 |
+| 4 | 用户域存储与密钥模型细化 | S7（下一轮） |
+| 5 | 本地 API 授权（app link / localApiSecret） | S8 / S9 |
