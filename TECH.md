@@ -464,6 +464,8 @@ ObjectSyncStream（常驻）
 
 ### 11.4 空间分类与密钥来源（按用户表格重构）
 
+> 术语对应：any-sync / anytype 的 **Space ↔ 我们的「库」**。用户域是我们系统独有的账号级概念，any-sync 侧没有单一等价物（由默认库 + 账号元数据 + 协作库等共同构成）。
+
 | | 空间标识 Space ID | 空间密钥（加密 / 签名） |
 | --- | --- | --- |
 | 派生类空间（个人 / 技术 / 一对一） | ✅ 确定性派生（SignKey + MasterKey + SpaceType） | ✅ 由账号密钥确定性派生 |
@@ -472,13 +474,16 @@ ObjectSyncStream（常驻）
 - **派生类空间**：空间 ID 与空间密钥确定性派生，可跨设备恢复。个人空间即我们的「默认库」。
 - **新建 / 共享空间**：ReadKey / MetadataKey 随机、空间 ID 新生成——因为共享空间要由 ACL 管理多参与者，不能从单一账号密钥派生。
 
-**与源码的两点校准**（供后续复核）：
+**与源码的校准（已确认）**：
 
-| 项 | 用户表述 | 源码事实 |
+| 项 | 校准结论 | 依据 |
 | --- | --- | --- |
-| 派生空间 ID 的输入 | SignKey + MasterKey + SpaceType | v0 派生器（heart 在用）：`spaceId = CID(header{identity, spaceType, payload, replicationKey=fnv(identityPub)})`，**不含 MasterKey**；v1 派生器把 ACL 根内嵌进头部，才间接包含 MasterKey（`spacepayloads.go` 两套派生函数对比） |
-| 派生空间读密钥来源 | 由账号 MasterKey 派生 | `AclState.deriveKey()` 用的是 **SignKey**：`DeriveSymmetricKey(SignKey.Raw(), "m/SLIP-0021/anysync/space")`（`aclstate.go:1107`；`st.key = AccountKeys.SignKey`，见 `aclstatebuilder.go:13`） |
-| 共享空间 ID 的产生方 | 协调节点分配 | 客户端本地生成随机 seed 的头部并算出 ID，协调节点只做 `SpaceSign` 授权与配额校验（`spacepayloads.StoragePayloadForSpaceCreate` + `coordinator.SpaceSign`） |
+| 派生空间 ID 的输入 | v0 派生器不含 MasterKey；只有 v1 内嵌 ACL 根才间接包含 | `spacepayloads.go` 两套派生函数对比 |
+| 派生空间读密钥来源 | 由 **SignKey** 经 SLIP-0021 派生，不是 MasterKey | `AclState.deriveKey()`（`aclstate.go:1107`）、`aclstatebuilder.go:13` |
+| 共享空间 ID 的产生方 | 客户端本地生成随机 seed 的头部算出 ID；协调节点只做签名授权与配额校验 | `StoragePayloadForSpaceCreate` + `coordinator.SpaceSign` |
+
+**派生空间 ID 公式（v0）**：`spaceId = CID(header{identity, spaceType, spaceHeaderPayload, replicationKey = fnv(identityPub)})`
+**派生空间读密钥**：`readKey = DeriveSymmetricKey(SignKey.Raw(), "m/SLIP-0021/anysync/space")`
 
 ### 11.3 待办
 
