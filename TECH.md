@@ -443,7 +443,7 @@ ObjectSyncStream（常驻）
 | **S4** | 设备 / 对端 key（Ed25519） | 每个客户端随机、每库随机。`device.key` 用账号 key 加密落盘。public → **PeerId() = 设备网络身份**；作为 any-sync `PeerKey` 完成网络握手 / 对端身份 | ⚠️ 部分：已随机 + 按实例/用途持久化；**仍为明文 base64（0600），未用账号 key 加密** |
 | **S5** | Ethereum key（ECDSA/secp256k1） | 主节点派生 `m/44'/60'/0'/0/i`。签 Ethereum 交易 + **Any Naming Service**（.any 域名） | ✅ 已派生并展示地址 |
 | **S6** | 账号元数据对称 key（ProfileSymKey） | 由账号签名 key 经 SLIP-0021 路径 `m/SLIP-0021/anythinks/account/metadata` 派生。用于账号元数据的 E2EE（含 profile 对称 key），供换设备登录时解密 | ❌ 未实现（路径口径待确认，见下） |
-| **S7** | 用户域密钥 | (SignKey + MasterKey + SpaceType) 派生，用于空间加密与 CRDT 变更签名（any-sync commonspace 内部） | ⏳ **待补充**：下一轮由用户说明用户域存储方式后细化 |
+| **S7** | 用户域密钥 | 派生类空间（个人/默认库、技术空间、一对一）的空间标识与读密钥均由账号密钥确定性派生，可跨设备恢复；新建/共享空间（Create）的 ReadKey 为随机 AES、MetadataKey 为随机 Ed25519，不从账号密钥派生。读密钥用于空间内容加密，账号 SignKey 用于变更签名，防止传输中被篡改 | ✅ 已核对源码（派生路径与差异见 11.4） |
 | **S8** | 会话 / app-link 密钥 | `WalletCreateSession` 随机生成，用于本地 API 授权 grant（app link） | ❌ 未实现（当前无本地 API 授权层） |
 | **S9** | localApiSecret（传输级） | 每次启动随机 32B，stdin 注入；用于授权 gRPC 引导调用，非派生密钥 | ❌ 未实现 |
 
@@ -454,13 +454,31 @@ ObjectSyncStream（常驻）
 | S2 与空间 ID | `spaceId = CID(RawSpaceHeader)`，头部含**随机 seed**、identity、spaceType 等；MasterKey 不进头部，只进 **ACL 根**（公钥 + 签名） | “MasterKey 参与空间 ID 派生”仅对 **Derive 空间**成立；普通 Create 空间不成立 |
 | S4 落盘 | heart：`accountKey.GetPublic().Encrypt(proto)` 后写文件 | 我们当前为明文 base64，需按此改进 |
 | S6 路径 | heart 现有常量为 `m/SLIP-0021/anytype/account/metadata`（`core/domain/account.go`）与 `m/SLIP-0021/anytype/space/key`（pushnotificationkeys） | 若需与 Anytype 共用账号元数据，路径须用 `anytype`；若为本项目自有命名，则按 `anythinks` 独立体系 |
-| S7 说明 | 普通空间 ReadKey 为随机 AES（heart: `crypto.NewAES()`）；派生空间（1-1 / tech）才由 identity+type+payload 确定性推导 | S7 的精确表述待下一轮补充 |
+| S7 说明 | 派生类空间读密钥由账号 SignKey 经 SLIP-0021 派生（`m/SLIP-0021/anysync/space`），不是"无读密钥"；共享空间 ReadKey 为随机 AES | 详见 11.4 |
 
 ### 11.2 设备密钥的使用规则（已实现）
 
 - 账户密钥来自助记词（S3），设备密钥**独立生成**并持久化；
 - 同一账户下按「实例 + 用途」分离：`device-<实例>.key`（业务连接）、`device-<实例>-sub.key`（实时订阅）；
 - 原因：同一 peerId 多连接会被节点关闭旧连接（详见 9.11）。
+
+### 11.4 空间分类与密钥来源（按用户表格重构）
+
+| | 空间标识 Space ID | 空间密钥（加密 / 签名） |
+| --- | --- | --- |
+| 派生类空间（个人 / 技术 / 一对一） | ✅ 确定性派生（SignKey + MasterKey + SpaceType） | ✅ 由账号密钥确定性派生 |
+| 新建 / 共享空间（Create） | ❌ 新生成 | ❌ ReadKey 随机 AES、MetadataKey 随机 Ed25519 |
+
+- **派生类空间**：空间 ID 与空间密钥确定性派生，可跨设备恢复。个人空间即我们的「默认库」。
+- **新建 / 共享空间**：ReadKey / MetadataKey 随机、空间 ID 新生成——因为共享空间要由 ACL 管理多参与者，不能从单一账号密钥派生。
+
+**与源码的两点校准**（供后续复核）：
+
+| 项 | 用户表述 | 源码事实 |
+| --- | --- | --- |
+| 派生空间 ID 的输入 | SignKey + MasterKey + SpaceType | v0 派生器（heart 在用）：`spaceId = CID(header{identity, spaceType, payload, replicationKey=fnv(identityPub)})`，**不含 MasterKey**；v1 派生器把 ACL 根内嵌进头部，才间接包含 MasterKey（`spacepayloads.go` 两套派生函数对比） |
+| 派生空间读密钥来源 | 由账号 MasterKey 派生 | `AclState.deriveKey()` 用的是 **SignKey**：`DeriveSymmetricKey(SignKey.Raw(), "m/SLIP-0021/anysync/space")`（`aclstate.go:1107`；`st.key = AccountKeys.SignKey`，见 `aclstatebuilder.go:13`） |
+| 共享空间 ID 的产生方 | 协调节点分配 | 客户端本地生成随机 seed 的头部并算出 ID，协调节点只做 `SpaceSign` 授权与配额校验（`spacepayloads.StoragePayloadForSpaceCreate` + `coordinator.SpaceSign`） |
 
 ### 11.3 待办
 
@@ -469,5 +487,5 @@ ObjectSyncStream（常驻）
 | 1 | 设备密钥改用账号公钥加密后落盘 | S4 |
 | 2 | 界面展示的 devicePeerId 与真实连接设备统一 | S4 |
 | 3 | 账号元数据对称 key 与 profile 加密 | S6 |
-| 4 | 用户域存储与密钥模型细化 | S7（下一轮） |
+| 4 | 按 11.4 的新模型重构：库=空间、用户域=账号级视图 | S7 / 空间分类 |
 | 5 | 本地 API 授权（app link / localApiSecret） | S8 / S9 |
