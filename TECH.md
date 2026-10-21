@@ -494,3 +494,32 @@ ObjectSyncStream（常驻）
 | 3 | 账号元数据对称 key 与 profile 加密 | S6 |
 | 4 | 按 11.4 的新模型重构：库=空间、用户域=账号级视图 | S7 / 空间分类 |
 | 5 | 本地 API 授权（app link / localApiSecret） | S8 / S9 |
+
+## 12. 本地网络重启：两个必踩的坑（2026-10-21）
+
+### 12.1 对外宣告的局域网 IP 漂移
+
+`etc/client.yml` 与 `etc/any-sync-coordinator/network.yml` 里的地址由 `.env` 的 `EXTERNAL_LISTEN_HOSTS` 生成。换网段后若不改，容器照样起得来、netcheck 照样 healthy（它测的是容器内回环），但**跨机必失败**——对端拿着一个不存在的 IP 去连。
+
+排查：`grep -c "<当前 LAN IP>" etc/client.yml`，正常应 > 0 且旧 IP 为 0。
+修法：改 `.env` 的 `EXTERNAL_LISTEN_HOSTS`，然后 `docker compose up -d` 触发重新生成。
+
+### 12.2 coordinator 报 3000 分区「丢失全部副本」
+
+```
+FATAL  main  can't save configuration
+{"error": "unsafe configuration: 3000 of 3000 partitions lose all current replicas ..."}
+```
+
+不是网络问题，是 Mongo 里的 `nodeConf` 集合被污染。`nodeconfsource/source.go` 的 `GetLast` 按 `_id` 倒序取第一条 `enable: true`，**不按 networkId 过滤**；若同一个 Mongo 里还有别的实验网络（不同 networkId、不同 peerId）的记录且更晚写入，安全阀就会拿它当「当前生效配置」比对，peerId 零重叠 → 全部分区判为丢失副本。
+
+排查：
+```bash
+docker compose exec -T mongo-1 mongosh --quiet --port 27001 coordinator --eval \
+  'db.nodeConf.find({}, {networkId:1, epoch:1, enable:1}).forEach(d=>print(d._id, d.networkId, d.epoch, d.enable))'
+```
+注意 mongosh 默认连 27017，本栈的 Mongo 在 **27001**，不加 `--port 27001` 会报 `ECONNREFUSED 127.0.0.1:27017`。
+
+修法：把不属于当前 networkId 的记录 `enable: false`（可逆，别删）。之后 `docker compose up -d` 即可通过，写入新 epoch。
+
+**结论：一套 any-sync 网络一个 Mongo。** 多套共用必然互相污染 active 配置。
