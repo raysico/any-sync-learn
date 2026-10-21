@@ -1,6 +1,6 @@
 #!/bin/bash
 cd "$(dirname "$0")"
-repos="any-sync any-sync-coordinator any-sync-node any-sync-filenode any-sync-consensusnode any-ns-node any-sync-tools any-sync-admin any-sync-dockercompose ansible-anysync puppet-anysync any-block anytype-heart"
+repos="any-sync any-sync-coordinator any-sync-node any-sync-filenode any-sync-consensusnode any-ns-node any-sync-tools any-sync-dockercompose ansible-anysync puppet-anysync any-block anytype-heart"
 for r in $repos; do
   if [ -d "$r" ]; then echo "SKIP $r (已存在)"; continue; fi
   echo ">>> 下载 $r ..."
