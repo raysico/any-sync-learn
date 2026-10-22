@@ -3,7 +3,7 @@
 > 从源码构建自有 any-sync 去中心化同步网络，并在其上实现自研的 userDomain 客户端；
 > 为后续的去中心化知识、资源以及数字资产管理工具做准备。
 
-当前版本：0.1.0（里程碑 Milestones0.1.0；版本号唯一真源为 package.json，随「准备发布新版」流程同步）
+当前版本：0.1.1（里程碑 Milestones0.1.0；版本号唯一真源为 package.json，随「准备发布新版」流程同步）
 
 ## 项目介绍
 
@@ -47,8 +47,8 @@
 
 ```bash
 # 1. 克隆各 any-sync 仓库到 src/（略，见 TECH-ARCHI.md 的版本基线）
-# 2. 启动依赖服务
-docker compose -f compose/local-net/docker-compose.yml up -d
+# 2. 启动依赖服务（Mongo / Redis / MinIO，compose 位于 compose/any-sync-dockercompose）
+bash scripts/localnet-infra.sh
 # 3. 启动本地网络
 npm run localnet:start
 # 4. 构建客户端
@@ -73,13 +73,24 @@ go build -ldflags "-X main.buildCommit=$COMMIT" -o bin/userdomain-web .
 3. 在「新建库」处建库，在库卡片内写记录；
 4. 「删除本地数据」清空本地，「从网络拉取」重新全量拉回。
 
+### 本地开发栈与排障
+
+```bash
+bash scripts/devstack-start.sh   # 基础设施 + 本地网络 + 本地 Web 组件
+bash scripts/devstack-stop.sh    # 只停 Web 进程；网络用 npm run localnet:stop
+scripts/localnet-mongo.sh        # Mongo shell（自动使用 .env 里的 27001）
+```
+
+`devstack-start.sh` 对已在运行的端口会跳过，不会重复拉起（需先按上一节构建 `userdomain-web` 二进制）；`localnet-mongo.sh` 解决 mongosh 默认连 27017 的 `ECONNREFUSED`（本栈 Mongo 在 27001），详见 `TECH.md` §12.2 / §13。
+
 ## 项目结构
 
 | 路径 | 说明 |
 | --- | --- |
 | `docs/protoinchinese/` | 38 个 .proto 中文注释版 |
 | `docs/any-sync-学习计划.md` | 研习路线与资料索引 |
-| `scripts/` | 本地网络启停脚本 |
+| `scripts/` | 本地网络启停、开发栈与 Mongo shell 工具 |
+| `resources/any-sync/` | 界面截图归档 |
 | `TECH.md` / `TECH-ARCHI.md` | 现行技术文档 / 历史归档 |
 | `test/tools/userdomain-web/` | userDomain 客户端（本地，不入库） |
 

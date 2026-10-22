@@ -1,6 +1,6 @@
 {
   "name": "any-sync-learn",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "milestone": "Milestones0.1.0",
   "description": "从源码构建自有 any-sync 网络的研习项目，含 userDomain Web 客户端",
   "main": "index.js",

@@ -387,6 +387,36 @@ go build -ldflags "-X main.buildCommit=$(git -C ../../.. rev-parse --short HEAD)
 **注意**：本机主/副本共用同一个 `data/libraries.jsonl`，所以本地记录天然一致；
 副本后台拉取的意义在于把**网络上其他设备的更新**带进本地，界面轮询再把变化呈现出来。
 
+### 9.11 实时同步（head update 订阅）
+
+对象变更的实时通知**不需要 PubSub**：节点把 head update 广播给所有带该 spaceId 标签的流，
+客户端只要把 `ObjectSyncStream` 常驻并先发 `SpaceSubscription` 即可收到。
+
+```
+ObjectSyncStream（常驻）
+  ① SpaceSubscription{SpaceIds:[space], Subscribe}   → 节点给这条流打上 space 标签
+  ② 其他实例写入 → 节点 nodePeerManager.BroadcastMessage → streamPool.Broadcast(spaceId)
+  ③ 客户端收到 HeadUpdate{objectId, heads, changes}
+  ④ 去抖 500ms → pullAndSave（按对象或整域拉取）
+```
+
+| 项 | 实现要点 |
+| --- | --- |
+| 订阅生命周期 | 跟随当前用户域；`domain.json` 变化即取消旧订阅、订阅新空间 |
+| 断线重连 | 读流出错后 5 秒重试；重连成功做一次全量对账 |
+| 去抖 | 500ms 合并同一批事件，避免重复拉取 |
+| 兜底 | 保留定时轮询（副本 20 秒），广播 at-most-once 不保证送达 |
+| 观测 | `GET /api/sync/status`：connected / events / pulls / lastEventAt / lastError |
+
+**必须记住的坑（实测）**
+
+| 现象 | 原因 | 处理 |
+| --- | --- | --- |
+| 订阅几秒后 `context canceled`，节点日志 `peer close` + `stream removed` | 同一个**设备密钥（peerId）**存在多条连接：新连接到达时节点关闭旧连接 | 每个进程、每种用途各用独立 device key：业务用 `device-<实例>.key`，订阅用 `device-<实例>-sub.key` |
+| 多进程共享助记词时互相踢线 | 助记词派生出相同 device key | 账户密钥仍来自助记词，**device key 单独生成并持久化** |
+
+结论：**同一账户下，设备身份的粒度是“每个客户端实例、每种连接用途”**；绝不能让两个进程或两类连接共用同一 device key。
+
 ## 10. 排障时最容易踩的坑
 
 | 现象 | 真实原因 |
@@ -397,5 +427,132 @@ go build -ldflags "-X main.buildCommit=$(git -C ../../.. rev-parse --short HEAD)
 | 两个客户端 networkId 不一致 | 用了本地配置 ID 而非协调节点返回的 `networkId` |
 | 空间 60 秒后被关闭 | `space.gcTTL` 正常回收，不是错误 |
 | 只推一个节点时另外两个返回 `tree not found` | 写入需遍历全部负责节点 |
+| 订阅几秒后断流、节点日志 `peer close` / `stream removed` | 同一设备密钥（peerId）存在多条连接，被节点挤掉；每进程/每用途用独立 device key（见 9.11） |
 | 自举结果与本地列表对不上 | 助记词账户与用户域所有者不一致（见 9.5） |
 | 往已有树追加变更后 heads 不变 | 推送时 `objectId` 用了变更 ID，必须用树 ID（见 9.3） |
+
+## 11. 密钥体系（S1–S9）
+
+> 本节的**定义**按项目既定口径（用户确认版本）记录；"实现状态"列标注本客户端的落地情况。
+
+| 编号 | 名称 | 定义 | 实现状态 |
+| --- | --- | --- | --- |
+| **S1** | 助记词 | 12 词 BIP39。当前落盘保存，最终由用户自行保管，用于登录 | ✅ 已实现（落盘 `userdomains.jsonl`，0600；属过渡手段） |
+| **S2** | SLIP-10 主节点 MasterKey | 助记词 → `m/44'/2046'/i'`。用于派生全部账号密钥；作为 `MasterKey` 参与空间创建（写入 ACL 根并由其签名）；`accountKey` 即它的 base64 | ✅ 已修正：空间创建改传 SLIP-10 MasterKey（此前误传设备密钥） |
+| **S3** | 账号签名 key（Identity, Ed25519） | 主节点派生 `m/44'/2046'/i'/0'`。public → **Account() = 账号 ID**；作为 any-sync `SignKey` 签名空间 / ACL / 树操作；派生出账号元数据对称 key（见 S6） | ✅ 已实现 |
+| **S4** | 设备 / 对端 key（Ed25519） | 每个客户端随机、每库随机。`device.key` 用账号 key 加密落盘。public → **PeerId() = 设备网络身份**；作为 any-sync `PeerKey` 完成网络握手 / 对端身份 | ⚠️ 部分：已随机 + 按实例/用途持久化；**仍为明文 base64（0600），未用账号 key 加密** |
+| **S5** | Ethereum key（ECDSA/secp256k1） | 主节点派生 `m/44'/60'/0'/0/i`。签 Ethereum 交易 + **Any Naming Service**（.any 域名） | ✅ 已派生并展示地址 |
+| **S6** | 账号元数据对称 key（ProfileSymKey） | 由账号签名 key 经 SLIP-0021 路径 `m/SLIP-0021/anythinks/account/metadata` 派生。用于账号元数据的 E2EE（含 profile 对称 key），供换设备登录时解密 | ❌ 未实现（路径口径待确认，见下） |
+| **S7** | 用户域密钥 | 派生类空间（个人/默认库、技术空间、一对一）的空间标识与读密钥均由账号密钥确定性派生，可跨设备恢复；新建/共享空间（Create）的 ReadKey 为随机 AES、MetadataKey 为随机 Ed25519，不从账号密钥派生。读密钥用于空间内容加密，账号 SignKey 用于变更签名，防止传输中被篡改 | ✅ 已核对源码（派生路径与差异见 11.4） |
+| **S8** | 会话 / app-link 密钥 | `WalletCreateSession` 随机生成，用于本地 API 授权 grant（app link） | ❌ 未实现（当前无本地 API 授权层） |
+| **S9** | localApiSecret（传输级） | 每次启动随机 32B，stdin 注入；用于授权 gRPC 引导调用，非派生密钥 | ❌ 未实现 |
+
+### 11.1 与源码的对照备注
+
+| 项 | 事实 | 影响 |
+| --- | --- | --- |
+| S2 与空间 ID | `spaceId = CID(RawSpaceHeader)`，头部含**随机 seed**、identity、spaceType 等；MasterKey 不进头部，只进 **ACL 根**（公钥 + 签名） | “MasterKey 参与空间 ID 派生”仅对 **Derive 空间**成立；普通 Create 空间不成立 |
+| S4 落盘 | heart：`accountKey.GetPublic().Encrypt(proto)` 后写文件 | 我们当前为明文 base64，需按此改进 |
+| S6 路径 | heart 现有常量为 `m/SLIP-0021/anytype/account/metadata`（`core/domain/account.go`）与 `m/SLIP-0021/anytype/space/key`（pushnotificationkeys） | 若需与 Anytype 共用账号元数据，路径须用 `anytype`；若为本项目自有命名，则按 `anythinks` 独立体系 |
+| S7 说明 | 派生类空间读密钥由账号 SignKey 经 SLIP-0021 派生（`m/SLIP-0021/anysync/space`），不是"无读密钥"；共享空间 ReadKey 为随机 AES | 详见 11.4 |
+
+### 11.2 设备密钥的使用规则（已实现）
+
+- 账户密钥来自助记词（S3），设备密钥**独立生成**并持久化；
+- 同一账户下按「实例 + 用途」分离：`device-<实例>.key`（业务连接）、`device-<实例>-sub.key`（实时订阅）；
+- 原因：同一 peerId 多连接会被节点关闭旧连接（详见 9.11）。
+
+### 11.4 空间分类与密钥来源（按用户表格重构）
+
+> 术语对应：any-sync / anytype 的 **Space ↔ 我们的「库」**。用户域是我们系统独有的账号级概念，any-sync 侧没有单一等价物（由默认库 + 账号元数据 + 协作库等共同构成）。
+
+| | 空间标识 Space ID | 空间密钥（加密 / 签名） |
+| --- | --- | --- |
+| 派生类空间（个人 / 技术 / 一对一） | ✅ 确定性派生（SignKey + MasterKey + SpaceType） | ✅ 由账号密钥确定性派生 |
+| 新建 / 共享空间（Create） | ❌ 新生成 | ❌ ReadKey 随机 AES、MetadataKey 随机 Ed25519 |
+
+- **派生类空间**：空间 ID 与空间密钥确定性派生，可跨设备恢复。个人空间即我们的「默认库」。
+- **新建 / 共享空间**：ReadKey / MetadataKey 随机、空间 ID 新生成——因为共享空间要由 ACL 管理多参与者，不能从单一账号密钥派生。
+
+**与源码的校准（已确认）**：
+
+| 项 | 校准结论 | 依据 |
+| --- | --- | --- |
+| 派生空间 ID 的输入 | v0 派生器不含 MasterKey；只有 v1 内嵌 ACL 根才间接包含 | `spacepayloads.go` 两套派生函数对比 |
+| 派生空间读密钥来源 | 由 **SignKey** 经 SLIP-0021 派生，不是 MasterKey | `AclState.deriveKey()`（`aclstate.go:1107`）、`aclstatebuilder.go:13` |
+| 共享空间 ID 的产生方 | 客户端本地生成随机 seed 的头部算出 ID；协调节点只做签名授权与配额校验 | `StoragePayloadForSpaceCreate` + `coordinator.SpaceSign` |
+
+**派生空间 ID 公式（v0）**：`spaceId = CID(header{identity, spaceType, spaceHeaderPayload, replicationKey = fnv(identityPub)})`
+**派生空间读密钥**：`readKey = DeriveSymmetricKey(SignKey.Raw(), "m/SLIP-0021/anysync/space")`
+
+### 11.3 待办
+
+| # | 待办 | 关联 |
+| --- | --- | --- |
+| 1 | 设备密钥改用账号公钥加密后落盘 | S4 |
+| 2 | 界面展示的 devicePeerId 与真实连接设备统一 | S4 |
+| 3 | 账号元数据对称 key 与 profile 加密 | S6 |
+| 4 | 按 11.4 的新模型重构：库=空间、用户域=账号级视图 | S7 / 空间分类 |
+| 5 | 本地 API 授权（app link / localApiSecret） | S8 / S9 |
+
+## 12. 本地网络重启：两个必踩的坑（2026-10-21）
+
+### 12.1 对外宣告的局域网 IP 漂移
+
+`etc/client.yml` 与 `etc/any-sync-coordinator/network.yml` 里的地址由 `.env` 的 `EXTERNAL_LISTEN_HOSTS` 生成。换网段后若不改，容器照样起得来、netcheck 照样 healthy（它测的是容器内回环），但**跨机必失败**——对端拿着一个不存在的 IP 去连。
+
+排查：`grep -c "<当前 LAN IP>" etc/client.yml`，正常应 > 0 且旧 IP 为 0。
+修法：改 `.env` 的 `EXTERNAL_LISTEN_HOSTS`，然后 `docker compose up -d` 触发重新生成。
+
+### 12.2 coordinator 报 3000 分区「丢失全部副本」
+
+```
+FATAL  main  can't save configuration
+{"error": "unsafe configuration: 3000 of 3000 partitions lose all current replicas ..."}
+```
+
+不是网络问题，是 Mongo 里的 `nodeConf` 集合被污染。`nodeconfsource/source.go` 的 `GetLast` 按 `_id` 倒序取第一条 `enable: true`，**不按 networkId 过滤**；若同一个 Mongo 里还有别的实验网络（不同 networkId、不同 peerId）的记录且更晚写入，安全阀就会拿它当「当前生效配置」比对，peerId 零重叠 → 全部分区判为丢失副本。
+
+排查：
+```bash
+docker compose exec -T mongo-1 mongosh --quiet --port 27001 coordinator --eval \
+  'db.nodeConf.find({}, {networkId:1, epoch:1, enable:1}).forEach(d=>print(d._id, d.networkId, d.epoch, d.enable))'
+```
+注意 mongosh 默认连 27017，本栈的 Mongo 在 **27001**，不加 `--port 27001` 会报 `ECONNREFUSED 127.0.0.1:27017`。这是**端口不同**，不是 Mongo 没起来：`etc/any-sync-coordinator/config.yml` 的 `mongo.connect` 一直用的是 `mongodb://mongo-1:27001`，所以业务侧（建库、写对象、读成员）完全正常。
+
+不想每次记端口就用包装脚本（从 `.env` 读 `MONGO_1_PORT`）：
+
+```bash
+scripts/localnet-mongo.sh                                   # 交互式 shell
+scripts/localnet-mongo.sh coordinator --eval 'db.spaces.countDocuments({})'
+```
+
+核对网络侧的空间记录：
+
+```bash
+scripts/localnet-mongo.sh coordinator --eval \
+  'db.spaces.find({}, {identity:1, status:1, type:1, isShareable:1}).limit(20)'
+# 按状态/类型汇总（2026-10-22 实测 11 条）
+scripts/localnet-mongo.sh coordinator --eval \
+  'db.spaces.aggregate([{$group:{_id:{status:"$status",type:"$type"},n:{$sum:1}}}]).toArray()'
+```
+
+修法：把不属于当前 networkId 的记录 `enable: false`（可逆，别删）。之后 `docker compose up -d` 即可通过，写入新 epoch。
+
+**结论：一套 any-sync 网络一个 Mongo。** 多套共用必然互相污染 active 配置。
+
+## 13. 本地开发栈与运维工具（2026-10-22）
+
+| 脚本 | 用途 |
+| --- | --- |
+| `scripts/localnet-infra.sh` | 只拉起基础设施容器：mongo-1 / redis / minio / create-bucket，并等待 healthy |
+| `scripts/localnet-start.sh` / `localnet-stop.sh` | 启停全源码构建的本地 any-sync 网络（协调 / 共识 / 同步 / 文件节点） |
+| `scripts/devstack-start.sh` | 组合入口：基础设施 → 本地网络 → 本地 Web 组件（已在运行的端口跳过） |
+| `scripts/devstack-stop.sh` | 只停 devstack 启动的 Web 进程（pid 记录在 `/tmp`），不碰 Docker 与本地网络 |
+| `scripts/localnet-mongo.sh` | 容器内 mongosh 包装：从 `.env` 读 `MONGO_1_PORT`，避免默认 27017 的 `ECONNREFUSED`（见 §12.2） |
+
+约定：
+
+- Web 进程的 pid 写在 `/tmp/userdomain-web.pid`、`/tmp/admin.pid`，`devstack-stop.sh` 只读这两个文件，误删不会影响 Docker。
+- `devstack-start.sh` 里的 `any-sync-admin` 已废弃：`fetch_all.sh` 不再拉取，只有本机保留旧二进制的环境还会被拉起；新环境请用 `userdomain-web`。
+- 所有脚本都用 `bash` 运行（依赖 `[[ ]]`、`set -e` 等），`bash -n scripts/*.sh` 是发布前的静态检查项。
