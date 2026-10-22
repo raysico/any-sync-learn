@@ -518,7 +518,24 @@ FATAL  main  can't save configuration
 docker compose exec -T mongo-1 mongosh --quiet --port 27001 coordinator --eval \
   'db.nodeConf.find({}, {networkId:1, epoch:1, enable:1}).forEach(d=>print(d._id, d.networkId, d.epoch, d.enable))'
 ```
-注意 mongosh 默认连 27017，本栈的 Mongo 在 **27001**，不加 `--port 27001` 会报 `ECONNREFUSED 127.0.0.1:27017`。
+注意 mongosh 默认连 27017，本栈的 Mongo 在 **27001**，不加 `--port 27001` 会报 `ECONNREFUSED 127.0.0.1:27017`。这是**端口不同**，不是 Mongo 没起来：`etc/any-sync-coordinator/config.yml` 的 `mongo.connect` 一直用的是 `mongodb://mongo-1:27001`，所以业务侧（建库、写对象、读成员）完全正常。
+
+不想每次记端口就用包装脚本（从 `.env` 读 `MONGO_1_PORT`）：
+
+```bash
+scripts/localnet-mongo.sh                                   # 交互式 shell
+scripts/localnet-mongo.sh coordinator --eval 'db.spaces.countDocuments({})'
+```
+
+核对网络侧的空间记录：
+
+```bash
+scripts/localnet-mongo.sh coordinator --eval \
+  'db.spaces.find({}, {identity:1, status:1, type:1, isShareable:1}).limit(20)'
+# 按状态/类型汇总（2026-10-22 实测 11 条）
+scripts/localnet-mongo.sh coordinator --eval \
+  'db.spaces.aggregate([{$group:{_id:{status:"$status",type:"$type"},n:{$sum:1}}}]).toArray()'
+```
 
 修法：把不属于当前 networkId 的记录 `enable: false`（可逆，别删）。之后 `docker compose up -d` 即可通过，写入新 epoch。
 
