@@ -1,6 +1,6 @@
 # DESIGN.md
 
-当前版本：0.1.0（唯一真源为 package.json）
+当前版本：0.1.1（唯一真源为 package.json）
 
 ## 1. 产品定位
 

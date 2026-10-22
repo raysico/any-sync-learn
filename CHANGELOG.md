@@ -1,5 +1,32 @@
 # CHANGELOG
 
+## 0.1.1 — 2026-10-22
+
+**里程碑**：Milestones0.1.0（补丁版本，不新增里程碑）
+
+### 新增
+
+- **本地开发栈脚本**：`scripts/devstack-start.sh` 一条命令拉起基础设施 → 本地网络 → 本地 Web 组件；`scripts/devstack-stop.sh` 只停 devstack 启动的 Web 进程（pid 记录在 `/tmp`）。
+- **Mongo shell 包装**：`scripts/localnet-mongo.sh` 从 `.env` 读 `MONGO_1_PORT`（本栈为 27001），避免 mongosh 默认连 27017 报 `ECONNREFUSED`；支持交互式，也支持 `--eval` 直接查 coordinator 库。
+- **界面截图归档**：`resources/any-sync/userdomain-web/` 收录三栏界面与历史面板截图。
+- 协作文档：`AGENTS.md` 增加「疑问 / 咨询只给答案，不改代码」条款。
+
+### 变更
+
+- `TECH.md` 补充密钥体系 S1–S9、空间分类与密钥来源、实时同步通道、设备密钥隔离、本地网络重启排障；§12.2 新增「Mongo 在 27001」的判定依据与空间记录查询。
+- `scripts/fetch_all.sh` 移除 `any-sync-admin`（功能失效已弃用）；`TECH-ARCHI.md` 的版本基线同步标注弃用。
+
+### 验证
+
+- `bash -n scripts/*.sh` 全部通过。
+- `scripts/localnet-mongo.sh coordinator --eval 'db.spaces.countDocuments({})'` 返回 11（2026-10-22 本地网络），`rs.status()` 为 `rs0` PRIMARY。
+- 端口口径三处一致：compose `.env`、coordinator `mongo.connect`、包装脚本均为 27001。
+
+### 关联提交
+
+- dev：`4acf5b0`、`7125633`、`17e120b`、`85bcb62`、`055243a`、`078fb29`、`fb35702`、`9ba6455`、`3b609ab`、`268f336`
+- tag：`v0.1.1`（发布时打在 main 的合并提交上）
+
 ## 0.1.0 — 2026-10-18
 
 **里程碑**：Milestones0.1.0

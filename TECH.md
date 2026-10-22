@@ -540,3 +540,19 @@ scripts/localnet-mongo.sh coordinator --eval \
 修法：把不属于当前 networkId 的记录 `enable: false`（可逆，别删）。之后 `docker compose up -d` 即可通过，写入新 epoch。
 
 **结论：一套 any-sync 网络一个 Mongo。** 多套共用必然互相污染 active 配置。
+
+## 13. 本地开发栈与运维工具（2026-10-22）
+
+| 脚本 | 用途 |
+| --- | --- |
+| `scripts/localnet-infra.sh` | 只拉起基础设施容器：mongo-1 / redis / minio / create-bucket，并等待 healthy |
+| `scripts/localnet-start.sh` / `localnet-stop.sh` | 启停全源码构建的本地 any-sync 网络（协调 / 共识 / 同步 / 文件节点） |
+| `scripts/devstack-start.sh` | 组合入口：基础设施 → 本地网络 → 本地 Web 组件（已在运行的端口跳过） |
+| `scripts/devstack-stop.sh` | 只停 devstack 启动的 Web 进程（pid 记录在 `/tmp`），不碰 Docker 与本地网络 |
+| `scripts/localnet-mongo.sh` | 容器内 mongosh 包装：从 `.env` 读 `MONGO_1_PORT`，避免默认 27017 的 `ECONNREFUSED`（见 §12.2） |
+
+约定：
+
+- Web 进程的 pid 写在 `/tmp/userdomain-web.pid`、`/tmp/admin.pid`，`devstack-stop.sh` 只读这两个文件，误删不会影响 Docker。
+- `devstack-start.sh` 里的 `any-sync-admin` 已废弃：`fetch_all.sh` 不再拉取，只有本机保留旧二进制的环境还会被拉起；新环境请用 `userdomain-web`。
+- 所有脚本都用 `bash` 运行（依赖 `[[ ]]`、`set -e` 等），`bash -n scripts/*.sh` 是发布前的静态检查项。
